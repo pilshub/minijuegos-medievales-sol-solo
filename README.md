@@ -1,7 +1,7 @@
-# Minijuegos Medievales (Sol & Sol)
+# Minijuegos Medievales
 
 Pack de **tres minijuegos de arcade artesanal** con estética de pergamino
-ilustrado. Diseñado por **Sol**, ejecutado por **DeepSeek V4 Flash**.
+ilustrado. Diseño y código originales, temática medieval.
 
 Sin dependencias externas: sin frameworks, sin build, sin red, sin fuentes
 remotas. Todo el arte (portadas, marcos, escenas) está dibujado en HTML/CSS
