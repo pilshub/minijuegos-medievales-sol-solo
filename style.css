@@ -1,0 +1,853 @@
+/* ============================================================================
+   MINIJUEGOS MEDIEVALES — style.css
+   Estética: pergamino ilustrado → arcade artesanal.
+   Sin dependencias ni recursos externos (CSS puro, fuentes del sistema).
+   Arquitectura compartida para el menú y los 3 juegos. Clases generales y
+   modificadores por <body class="juego castillo|fragua|heraldo">.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1 · TOKENS
+--------------------------------------------------------------------------- */
+:root {
+  /* ---- paleta: pergamino cálido, tinta sepia, lacre, azul heráldico, oro ---- */
+  --perga-alto: #fbf3e2;   /* pergamino claro (fondos elevados) */
+  --perga:      #f3e6cf;   /* pergamino medio (fondo general) */
+  --perga-som:  #e6d2ae;   /* pergamino sombreado */
+  --perga-dor:  #d3b57c;   /* pergamino envejecido (detalles) */
+  --tinta:      #2c2017;   /* tinta sepia oscura (texto principal) */
+  --tinta-bla:  #65492f;   /* tinta media (subtextos) */
+  --tinta-ten:  #8a6f4d;   /* tinta tenue (leyendas) */
+  --sepia:      #7a5b37;
+  --lacre:      #a33024;   /* rojo de lacre */
+  --lacre-osc:  #6e1c13;
+  --azul:       #2e4a74;   /* azul heráldico */
+  --azul-osc:   #1e3352;
+  --oro:        #bd8f3b;   /* oro envejecido */
+  --oro-cl:     #dab45e;
+  --oro-osc:    #8a6523;
+  --tierra:     #6a4a2a;
+  --tierra-cl:  #9c7c47;
+  --caron:      #241f1a;   /* carbón / hierro */
+  --verda:      #4a6b3a;   /* verde bosque (vida) */
+  --acento:     var(--lacre); /* hue por defecto (cada juego lo modula) */
+
+  /* ---- tipografía local (sin webfonts) ---- */
+  --fuente-dis:      Georgia, "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", serif;
+  --fuente-cuerpo:   "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --fuente-mono:     "Courier New", "Consolas", monospace;
+
+  /* ---- geometría ---- */
+  --r-borde:   5px;      /* esquinas suaves pero cuadradas, nada "SaaS" */
+  --min-touch: 48px;     /* objetivo táctil mínimo */
+
+  /* ---- ritmo tipográfico fluido (clamp) ---- */
+  --t-xxs:   clamp(0.68rem, 0.70rem + 0.1vw, 0.80rem);
+  --t-xs:    clamp(0.80rem, 0.82rem + 0.2vw, 0.94rem);
+  --t-sm:    clamp(0.92rem, 0.94rem + 0.2vw, 1.06rem);
+  --t-md:    clamp(1.05rem, 1.12rem + 0.5vw, 1.35rem);
+  --t-lg:    clamp(1.35rem, 1.55rem + 1.0vw, 2.00rem);
+  --t-xl:    clamp(1.90rem, 2.30rem + 1.7vw, 3.10rem);
+  --t-xxl:   clamp(2.50rem, 3.20rem + 2.4vw, 4.30rem);
+}
+
+/* ---------------------------------------------------------------------------
+   2 · RESET + BASE
+--------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+/* hidden siempre gana a cualquier display autor (overlays, hud, etc.) */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  font-family: var(--fuente-cuerpo);
+  color: var(--tinta);
+  background-color: var(--perga);
+  min-height: 100vh;
+  line-height: 1.45;
+  overflow-x: hidden;
+}
+img, canvas, svg, video { max-width: 100%; display: block; }
+button { font: inherit; cursor: pointer; touch-action: manipulation; }
+input, textarea, select { font: inherit; }
+
+/* Canvas de juego: el dedo no debe disparar scroll/zoom sobre el lienzo. */
+canvas { touch-action: none; }
+
+/* Franja segura (móviles con barra inferior / gestos) */
+@supports (padding: max(1px)) {
+  body { padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+}
+
+/* Foco visible inequívoco */
+:focus-visible {
+  outline: 3px solid var(--oro-cl);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--perga-alto);
+}
+::selection { background: var(--sepia); color: var(--perga-alto); }
+
+/* Reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   3 · HOJA DE PERGAMINO (página general: fondo, marco, filigrana)
+--------------------------------------------------------------------------- */
+.page {
+  min-height: 100vh;
+  padding: clamp(0.6rem, 0.8rem + 0.6vw, 1.4rem) clamp(0.75rem, 1rem + 1vw, 2rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.papel {
+  position: relative;
+  width: min(96vw, 940px);
+  background:
+    radial-gradient(circle at 50% 18%, var(--perga-alto) 0%, var(--perga) 38%, var(--perga-som) 100%);
+  border: 3px solid var(--sepia);
+  box-shadow:
+    inset 0 0 0 1px var(--perga-dor),
+    inset 0 0 46px rgba(58, 37, 15, 0.12),
+    0 8px 24px rgba(52, 34, 18, 0.35);
+  padding: clamp(1rem, 1.2rem + 0.8vw, 2rem);
+}
+/* doble marco interior */
+.papel::before {
+  content: "";
+  position: absolute; inset: 9px;
+  border: 1px solid var(--tierra-cl);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Filigrana horizontal con gema central */
+.filig { display: flex; align-items: center; gap: 1.1rem; margin-block: 0.9rem; }
+.filig::before, .filig::after {
+  content: "";
+  flex: 1; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--oro), transparent);
+  opacity: 0.6;
+}
+.filig > .gema { color: var(--oro); font-size: var(--t-sm); line-height: 1; }
+
+/* ---------------------------------------------------------------------------
+   4 · TIPOGRAFÍA UTILITARIA
+--------------------------------------------------------------------------- */
+h1, h2, h3 { font-family: var(--fuente-dis); font-weight: 700; }
+.versalitas {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.centrado { text-align: center; }
+.muted { color: var(--tinta-bla); }
+.tenue { color: var(--tinta-ten); }
+
+/* rótulo pequeño de heráldica (mini-mayúsculas espaciado) */
+.rotulo {
+  font-family: var(--fuente-dis);
+  font-size: var(--t-xxs);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--oro-osc);
+}
+
+/* ---------------------------------------------------------------------------
+   5 · BOTONES
+--------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: var(--min-touch);
+  padding: 0.7rem 1.5rem;
+  font-family: var(--fuente-dis);
+  font-size: var(--t-md);
+  letter-spacing: 0.05em;
+  border: 2px solid var(--lacre-osc);
+  background: linear-gradient(var(--lacre), var(--lacre-osc));
+  color: var(--perga-alto);
+  border-radius: var(--r-borde);
+  box-shadow: 0 3px 0 var(--lacre-osc), inset 0 1.5px rgba(255, 214, 180, 0.30);
+  cursor: pointer; user-select: none;
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+  text-decoration: none;
+}
+.btn:hover, .btn:focus { filter: brightness(1.10); }
+.btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--lacre-osc); }
+
+.btn--oro {
+  background: linear-gradient(var(--oro), var(--oro-osc));
+  border-color: var(--oro-osc);
+  color: var(--caron);
+  box-shadow: 0 3px 0 var(--oro-osc), inset 0 1.5px rgba(255, 240, 190, 0.45);
+}
+.btn--papel {
+  background: linear-gradient(var(--perga-alto), var(--perga-dor));
+  border-color: var(--sepia);
+  color: var(--tinta);
+  box-shadow: 0 3px 0 rgba(90, 63, 32, 0.5);
+}
+.btn--hueco {
+  background: transparent; border: 2px solid currentColor; color: inherit;
+  box-shadow: none;
+}
+.btn--pequeno { min-height: 44px; padding: 0.45rem 1rem; font-size: var(--t-sm); }
+.btn--ancho { width: 100%; }
+
+/* botón JUGAR — principal de la titular (convenio: #btn-jugar) */
+.btn-jugar {
+  min-width: 11rem;
+  font-family: var(--fuente-dis);
+  font-size: var(--t-lg);
+  font-weight: 700;
+  padding: 0.85rem 2.2rem;
+  border-width: 3px;
+}
+.btn-jugar::before { content: "▶ "; }
+
+/* ---------------------------------------------------------------------------
+   6 · ESTADOS COMUNES (los juegos los reutilizan)
+--------------------------------------------------------------------------- */
+.is-hidden { display: none !important; }
+.is-invis { visibility: hidden; }
+.is-flash { animation: tap-flash 0.35s steps(2) both; }
+@keyframes tap-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+.is-mono { font-family: var(--fuente-mono); }
+.is-faded { opacity: 0.55; }
+.is-victoria { animation: eyeblink 7s ease-in-out; }
+@keyframes eyeblink { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+.sello-pausa {
+  position: absolute; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(47, 34, 20, 0.32);
+}
+.sello-pausa .sello {
+  width: 118px; height: 118px; border-radius: 50%;
+  border: 8px double var(--lacre);
+  background: radial-gradient(var(--perga-alto), var(--perga-dor));
+  display: grid; place-items: center; text-align: center;
+  font-family: var(--fuente-dis);
+  font-size: var(--t-sm); letter-spacing: 0.22em;
+  color: var(--lacre-osc);
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   7 · CABECERA Y PIE DEL MENÚ
+--------------------------------------------------------------------------- */
+.cabecera { padding: 0.4rem 0 0.2rem; text-align: center; }
+.cabecera .reino {
+  font-family: var(--fuente-dis);
+  font-size: var(--t-xxs);
+  font-weight: 700;
+  letter-spacing: 0.42em; text-transform: uppercase;
+  color: var(--lacre-osc);
+}
+.cabecera h1 {
+  font-size: var(--t-xxl);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--tinta);
+  text-shadow: 0 2px 0 var(--perga-som);
+}
+.cabecera .sub {
+  margin: 0.55em auto 0;
+  max-width: 46ch; text-align: center;
+  font-size: var(--t-md);
+  color: var(--tinta-bla);
+}
+
+/* Escudo de armas (crest) con clip-path, sin imágenes */
+.crest {
+  width: clamp(52px, 58px + 1.6vw, 84px);
+  aspect-ratio: 1 / 1.18;
+  margin: 0 auto 0.35rem;
+  clip-path: polygon(50% 0%, 100% 14%, 100% 52%, 62% 100%, 38% 100%, 0% 52%, 0% 14%);
+  background: linear-gradient(135deg, var(--oro), var(--oro-osc));
+  display: grid; place-items: center;
+}
+.crest::before {
+  content: "";
+  position: absolute; inset: 18%;
+  clip-path: inherit;
+  background: linear-gradient(135deg, var(--azul), var(--azul-osc));
+}
+.crest::after {
+  content: "♜";
+  font-size: var(--t-lg); color: var(--oro-cl);
+  text-shadow: 0 1px 0 rgba(255, 226, 150, 0.5);
+}
+
+.pie {
+  text-align: center;
+  margin-top: 1.8rem;
+  font-size: var(--t-xxs); color: var(--tinta-ten);
+}
+.pie::before { content: "⸙  "; color: var(--oro); font-size: var(--t-sm); }
+
+/* ---------------------------------------------------------------------------
+   8 · MENÚ: TARJETAS (enlaces táctiles grandes con portada CSS)
+--------------------------------------------------------------------------- */
+.menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: clamp(1.1rem, 1.4rem + 0.8vw, 2rem);
+  justify-content: center;
+  width: 100%;
+  max-width: 900px;
+  margin: 1.2rem auto 0;
+}
+.card {
+  position: relative;
+  display: flex; flex-direction: column;
+  min-height: 320px;
+  background: linear-gradient(var(--perga-alto), var(--perga-dor));
+  border: 2px solid var(--sepia);
+  border-radius: var(--r-borde);
+  box-shadow: 0 5px 14px rgba(48, 32, 16, 0.22);
+  text-decoration: none; color: inherit;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.card:hover, .card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 26px rgba(60, 32, 16, 0.38);
+}
+.card:focus-visible { outline: 3px solid var(--oro-cl); outline-offset: 3px; }
+
+.card .cuerpo {
+  padding: 0.9rem 1.05rem 1.1rem;
+  display: flex; flex-direction: column; flex: 1;
+}
+.card h2 {
+  font-size: var(--t-lg); color: var(--tinta);
+  margin-bottom: 0.3rem;
+}
+.card .mecanica { font-size: var(--t-sm); color: var(--tinta-bla); line-height: 1.4; }
+.card .etiqueta {
+  align-self: flex-start;
+  font-family: var(--fuente-dis);
+  font-size: var(--t-xxs); text-transform: uppercase;
+  letter-spacing: 0.14em; color: var(--azul-osc);
+  background: rgba(46, 74, 116, 0.09);
+  border: 1px solid var(--azul);
+  padding: 0.18rem 0.6rem; margin-top: 0.7rem;
+}
+.card .play-row {
+  margin-top: auto; padding-top: 0.9rem;
+  display: flex; align-items: center;
+  gap: 0.7rem;
+}
+.card .sello-lacre {
+  flex: none;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, var(--lacre), var(--lacre-osc));
+  box-shadow: 0 2px 0 var(--lacre-osc), inset 0 1px rgba(255, 220, 180, 0.4);
+  color: var(--perga-alto);
+  display: grid; place-items: center;
+  font-family: var(--fuente-mono); font-size: var(--t-sm);
+}
+.card .promesa {
+  flex: 1; text-align: right;
+  font-family: var(--fuente-dis);
+  font-size: var(--t-sm); letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--lacre-osc);
+}
+.card .promesa::after { content: " ➤"; }
+
+/* ---------------------------------------------------------------------------
+   9 · PORTADAS — escenas decorativas 100% CSS (sin imágenes ni red)
+   Cada una antevista la mecánica de su juego.
+--------------------------------------------------------------------------- */
+.portada {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-bottom: 2px solid var(--sepia);
+}
+.portada::after {   /* sello de lacre en esquina */
+  content: "";
+  position: absolute; right: 7px; top: 7px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, var(--lacre), var(--lacre-osc));
+  opacity: 0.95;
+}
+
+/* ---------- Portada 1 · CASTILLO: muralla en perfil besando el sol ---------- */
+.escena-castillo { position: absolute; inset: 0; }
+.escena-castillo .cielo {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, #c9a86c, #e8c98e 45%, #f3d9a8);
+}
+.escena-castillo .sol {
+  position: absolute; top: 10%; right: 13%;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffdf96, #f2b64d);
+  box-shadow: 0 0 0 6px rgba(240, 196, 110, 0.45);
+}
+.escena-castillo .muralla {
+  position: absolute; left: 14%; right: 14%; bottom: 8%;
+  height: 52%;
+  background: linear-gradient(90deg, var(--tierra-cl), var(--tierra));
+  border-radius: 6px 6px 0 0;
+}
+.escena-castillo .almenas {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 14px;
+  background: var(--tierra-cl);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 26px, transparent 26px 36px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 26px, transparent 26px 36px);
+}
+.escena-castillo .vanos {
+  position: absolute; left: 34px; top: 34px;
+  width: 12px; height: 30px; border-radius: 6px 6px 0 0;
+  background: var(--azul-osc); opacity: 0.85;
+  box-shadow: 30px 0 0 var(--azul-osc), 60px 0 0 var(--azul-osc);
+}
+.escena-castillo .bandera {
+  position: absolute; top: -46px; left: 18px;
+  width: 3px; height: 46px; background: var(--caron);
+}
+.escena-castillo .bandera::after {
+  content: "";
+  position: absolute; left: 2px; top: -12px;
+  width: 26px; height: 18px;
+  background: linear-gradient(90deg, var(--lacre), var(--lacre-osc));
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.escena-castillo .suelo {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 10%;
+  background: linear-gradient(var(--perga-dor), var(--perga-som));
+}
+.escena-castillo .piedras {
+  position: absolute; bottom: 3%; left: 8%; right: 8%; height: 6px;
+  background-image:
+    radial-gradient(circle, var(--tierra-cl) 2.6px, transparent 3.2px),
+    radial-gradient(circle, var(--tierra-cl) 2.6px, transparent 3.2px);
+  background-size: 22px 8px, 22px 8px;
+  background-position: 0 0, 11px 0;
+  opacity: 0.5;
+}
+
+/* ---------- Portada 2 · FRAGUA: yunque, espada y chispas ---------- */
+.escena-fragua { position: absolute; inset: 0;
+  background: linear-gradient(180deg, #2b2320, #191410, #33261a);
+}
+.escena-fragua .espada {
+  position: absolute; top: 18%; right: 18%;
+  width: 8px; height: 38%;
+  border-radius: 4px;
+  background: linear-gradient(var(--oro-cl), var(--oro-osc));
+  transform: rotate(-28deg);
+  transform-origin: center bottom;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+}
+.escena-fragua .espada::before {   /* pomo */
+  content: ""; position: absolute; bottom: -5px; left: 50%;
+  width: 14px; height: 6px; border-radius: 3px;
+  background: var(--oro-cl); transform: translateX(-50%);
+}
+.escena-fragua .espada::after {    /* cruce de guardas */
+  content: ""; position: absolute; bottom: 12%; left: 50%;
+  width: 26px; height: 5px; border-radius: 2px;
+  background: var(--oro); transform: translateX(-50%);
+}
+.escena-fragua .yunque {
+  position: absolute; left: 18%; bottom: 14%;
+  width: 38%; height: 28%;
+}
+.escena-fragua .yunque .cuerpo {
+  position: absolute; inset: 0 auto 10% 0; height: 58%;
+  background: radial-gradient(ellipse at 40% 30%, #46372c, var(--caron));
+  border-radius: 4px;
+}
+.escena-fragua .yunque .yugo {
+  position: absolute; inset: 0 0 auto 0; height: 22%;
+  background: linear-gradient(#5a4838, var(--caron));
+  border-radius: 9px 9px 3px 3px;
+}
+.escena-fragua .chispas {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(circle, var(--oro-cl) 0 1.5px, transparent 2px),
+    radial-gradient(circle, var(--oro) 0 1px, transparent 2px),
+    radial-gradient(circle, var(--lacre) 0 1.5px, transparent 2px);
+  background-size: 48px 48px, 64px 64px, 90px 90px;
+  background-position: 10px 20px, 30px 8px, 60px 30px;
+  animation: chispas 1.35s steps(6) infinite;
+}
+@keyframes chispas {
+  0%   { opacity: 0.4; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+/* ---------- Portada 3 · HERALDO: camino real al atardecer ---------- */
+.escena-heraldo { position: absolute; inset: 0;
+  background: linear-gradient(180deg, #fbc08b, #ec9b5c, #d47840, #8f5c33);
+}
+.escena-heraldo .sol-bajo {
+  position: absolute; bottom: 36%; left: 18%;
+  width: 64px; height: 64px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, #ffe6a8, #f3b05c);
+  box-shadow: 0 0 0 12px rgba(247, 174, 90, 0.45), 0 0 54px rgba(242, 130, 50, 0.55);
+}
+.escena-heraldo .colinas {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 42%;
+  background: linear-gradient(var(--tierra-cl), var(--tierra));
+  clip-path: polygon(0 78%, 14% 62%, 30% 70%, 46% 56%, 64% 66%, 80% 56%, 100% 66%, 100% 100%, 0 100%);
+}
+.escena-heraldo .carretera {
+  position: absolute; left: 50%; bottom: 0;
+  transform: translateX(-50%);
+  width: 34%; height: 56%;
+  background: linear-gradient(180deg, rgba(94, 62, 30, 0) 0%, rgba(94, 62, 30, 0.92) 100%);
+  clip-path: polygon(40% 0, 60% 0, 96% 100%, 4% 100%);
+}
+.escena-heraldo .arbol {
+  position: absolute; bottom: 6%;
+  width: 40px; height: 70px;
+  background: #3a2c18;
+  clip-path: polygon(50% 100%, 0 30%, 100% 30%, 100% 100%, 0 100%);
+}
+.escena-heraldo .arbol--a { left: 6%;  transform: scale(1.2); }
+.escena-heraldo .arbol--b { left: 14%; transform: scale(0.8); }
+.escena-heraldo .arbol--c { right: 8%; transform: scale(1.1); }
+.escena-heraldo .arbol--d { right: 16%; transform: scale(0.75); }
+.escena-heraldo .jinete {
+  position: absolute; left: 34%; bottom: 15%;
+  width: 30px; height: 30px;
+  background: var(--caron);
+  clip-path: polygon(30% 0, 70% 0, 60% 38%, 30% 46%, 44% 100%, 26% 100%);
+}
+.escena-heraldo .jinete::after {   /* montura del corcel */
+  content: ""; position: absolute; left: -16px; bottom: 4px;
+  width: 56px; height: 3px; border-radius: 3px;
+  background: var(--caron);
+}
+.escena-heraldo .pergamino {
+  position: absolute; top: 10%; right: 12%;
+  width: 30px; height: 44px;
+  background: linear-gradient(var(--perga-alto), var(--perga-dor));
+  border-radius: 3px;
+  transform: rotate(12deg);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+}
+
+/* ---------------------------------------------------------------------------
+   10 · SHELL DE JUEGO (compartido por los 3 juegos, modulado por body class)
+--------------------------------------------------------------------------- */
+.juego .marco {
+  position: relative;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 0.8rem clamp(0.6rem, 0.8rem + 1vw, 1.3rem);
+  border: 3px solid var(--oro);
+  border-radius: var(--r-borde);
+  background: linear-gradient(var(--perga), var(--perga-som));
+  box-shadow: 0 6px 18px rgba(52, 34, 18, 0.30);
+}
+.juego .volver {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-family: var(--fuente-dis); font-size: var(--t-xs);
+  color: var(--tinta-bla);
+  background: transparent; border: 1px solid var(--sepia);
+  padding: 0.35rem 0.7rem; border-radius: 3px;
+  text-decoration: none;
+  min-height: 40px;
+  /* por encima del overlay de título (fixed, z-index 20) para poder volver al menú */
+  position: relative; z-index: 30;
+}
+.juego .volver:hover, .juego .volver:focus-visible {
+  color: var(--lacre-osc);
+  border-color: var(--lacre);
+  outline: 3px solid var(--oro-cl);
+  outline-offset: 2px;
+}
+.juego .volver::before { content: "☚  "; }
+.juego h1.titulo-juego {
+  font-size: var(--t-lg); text-align: center;
+  letter-spacing: 0.06em; color: var(--tinta);
+  margin: 0.25em 0 0.4em;
+}
+
+/* ---- overlay de título (convenio: .overlay#mj-titulo) ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  padding: 1.2rem;
+  background: radial-gradient(120% 120% at 50% 32%, var(--perga-alto), var(--perga) 52%, #59432b 130%);
+  overflow-y: auto;
+}
+.overlay .panel-titulo {
+  width: min(480px, 100%);
+  background: linear-gradient(var(--perga-alto), var(--perga-dor));
+  border: 3px solid var(--azul-osc);
+  box-shadow: inset 0 0 0 1px var(--perga-alto), 0 10px 26px rgba(30, 20, 10, 0.5);
+  padding: clamp(1.2rem, 1.4rem + 1vw, 1.9rem);
+  border-radius: var(--r-borde);
+  text-align: center;
+}
+.overlay .panel-titulo .reino {
+  font-family: var(--fuente-dis); font-size: var(--t-xxs);
+  letter-spacing: 0.3em; text-transform: uppercase; color: var(--lacre-osc);
+}
+.overlay .panel-titulo .crest {
+  width: clamp(46px, 52px + 1vw, 64px);
+  margin: 0.4rem auto;
+}
+.overlay .panel-titulo h2 {
+  font-size: var(--t-xl); text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--tinta);
+}
+.overlay .panel-titulo .mecanica-texto {
+  font-size: var(--t-sm); line-height: 1.5; color: var(--tinta-bla);
+  text-align: left;
+  margin-top: 0.8rem;
+  border-top: 1px dashed var(--sepia);
+  padding-top: 0.7rem;
+}
+.overlay .panel-titulo .mecanica-texto ul { margin: 0.3rem 0 0 1.1rem; }
+.overlay .panel-titulo .btn-jugar { margin-top: 1.1rem; }
+.overlay .panel-titulo .nota {
+  font-size: var(--t-xxs); color: var(--tinta-ten);
+  margin-top: 0.6rem;
+}
+
+/* ---- HUD (barra de estado en vivo) ---- */
+.hud {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 0.4rem clamp(0.6rem, 1rem, 1.4rem);
+  padding: 0.45rem 0.6rem;
+  background: linear-gradient(180deg, var(--caron), #33291b);
+  color: var(--perga-alto);
+  border: 2px solid var(--acento);
+  font-family: var(--fuente-mono); font-size: var(--t-xxs);
+}
+.hud .chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: rgba(0,0,0,0.30); padding: 0.22rem 0.5rem;
+  border-radius: 3px;
+}
+.hud .etq { color: var(--perga-dor); opacity: 0.9; }
+.hud .val { color: var(--perga-alto); font-weight: 700; }
+
+/* barra genérica de cantidad (vida del muro, calidad, etc.) */
+.barra {
+  flex: 1 1 140px; height: 13px; border-radius: 6px;
+  background: #16100c;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.4);
+}
+.barra .lleno {
+  display: block; height: 100%; width: 100%;
+  background: var(--verda);
+  transition: width 260ms ease;
+}
+.barra--lacre .lleno { background: var(--lacre); }
+.barra--oro .lleno   { background: var(--oro); }
+.barra--azul .lleno  { background: var(--azul); }
+.etq-barra {
+  width: 100%;
+  font-size: var(--t-xxs); text-transform: uppercase;
+  letter-spacing: 0.16em; color: var(--tinta-ten);
+}
+
+/* ---- escenario: contenedor del lienzo ---- */
+.escenario {
+  position: relative;
+  margin: 0.6rem 0;
+  border: 2px solid var(--acento);
+  background: linear-gradient(180deg, #efe0c2, var(--perga-dor));
+}
+.escenario canvas {
+  touch-action: none;
+  display: block; width: 100%;
+  aspect-ratio: 16 / 9;
+}
+.escenario .manto {   /* viñeta de calidez (sutil, no glassmorphism) */
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 64%, rgba(41, 27, 12, 0.28));
+}
+.nota-canvas {
+  font-size: var(--t-xxs); color: var(--tinta-ten); text-align: center;
+}
+
+/* ---- paneles de estado (recursos, inventario) ---- */
+.paneles {
+  display: grid; gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.panel {
+  border: 1px solid var(--sepia);
+  background: var(--perga-alto);
+  padding: 0.6rem 0.8rem;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  box-shadow: 0 2px 0 var(--perga-som);
+}
+.panel h4 {
+  font-family: var(--fuente-dis); font-size: var(--t-xs);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--tinta-bla);
+}
+.panel .filera { display: flex; justify-content: space-between; font-size: var(--t-xs); }
+
+/* ---------------------------------------------------------------------------
+   11 · CONTROLES TÁCTILES (≥48px) + MODIFICADORES POR JUEGO
+--------------------------------------------------------------------------- */
+.controles {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.6rem max(0.6rem, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, #3b2e1e, var(--caron));
+  border-top: 2px solid var(--acento);
+}
+.tbtn {
+  min-width: 82px; min-height: var(--min-touch);
+  padding: 0.55rem 0.85rem;
+  font-family: var(--fuente-dis); font-size: var(--t-sm);
+  letter-spacing: 0.04em;
+  color: var(--perga-alto);
+  background: linear-gradient(var(--ctb-a, var(--azul)), var(--ctb-b, var(--azul-osc)));
+  border: 2px solid var(--azul-osc);
+  border-radius: 4px;
+  box-shadow: 0 3px 0 var(--azul-osc);
+  cursor: pointer; user-select: none; touch-action: manipulation;
+  transition: transform 70ms ease;
+}
+.tbtn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--azul-osc); }
+.tbtn .tecla {
+  display: block;
+  font-family: var(--fuente-mono); font-size: var(--t-xxs);
+  opacity: 0.7;
+}
+/* acentos / portadas de botón por juego */
+body.castillo { --acento: var(--lacre); }
+body.fragua  { --acento: var(--oro); }
+body.heraldo { --acento: var(--tierra); }
+body.castillo .tbtn { --ctb-a: var(--lacre); --ctb-b: var(--lacre-osc); border-color: var(--lacre-osc); box-shadow: 0 3px 0 var(--lacre-osc); }
+body.fragua  .tbtn { --ctb-a: var(--oro-cl); --ctb-b: var(--oro-osc); border-color: var(--oro-osc); box-shadow: 0 3px 0 var(--oro-osc); color: var(--caron); }
+body.heraldo .tbtn { --ctb-a: var(--tierra-cl); --ctb-b: var(--tierra); border-color: var(--tierra); box-shadow: 0 3px 0 var(--tierra); }
+
+.tbtn--lacre { background: linear-gradient(var(--lacre), var(--lacre-osc)); border-color: var(--lacre-osc); color: var(--perga-alto); }
+.tbtn--oro   { background: linear-gradient(var(--oro-cl), var(--oro-osc)); border-color: var(--oro-osc); color: var(--caron); }
+.tbtn--tierra{ background: linear-gradient(var(--tierra-cl), var(--tierra)); border-color: var(--tierra); color: var(--perga-alto); }
+
+/* ---------------------------------------------------------------------------
+   RESPONSIVE (mobile-first)
+   --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   12 · ESTADOS DE JUEGO + AVISOS (compartido por los 3 juegos)
+--------------------------------------------------------------------------- */
+/* panel final de victoria/derrota */
+.overlay .panel-titulo.panel--victoria { border-color: var(--oro-osc); }
+.overlay .panel-titulo.panel--victoria h2 { color: var(--oro-osc); }
+.overlay .panel-titulo.panel--derrota  { border-color: var(--lacre-osc); }
+.overlay .panel-titulo.panel--derrota h2 { color: var(--lacre-osc); }
+.overlay .panel-titulo .datos-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.8rem;
+  text-align: left;
+}
+.overlay .panel-titulo .datos-grid b { font-family: var(--fuente-mono); }
+.overlay .panel-titulo .record {
+  margin-top: 0.6rem; font-size: var(--t-xs);
+  color: var(--oro-osc); text-align: center;
+}
+.overlay .panel-titulo .btn-rejugar { margin-top: 0.9rem; }
+
+/* toast/aviso superior */
+.aviso {
+  position: fixed; top: clamp(0.5rem, 0.7rem + 1vw, 1.2rem); left: 50%;
+  transform: translateX(-50%); z-index: 30;
+  max-width: min(92vw, 420px);
+  padding: 0.55rem 1.1rem;
+  background: linear-gradient(var(--perga-alto), var(--perga-dor));
+  border: 2px solid var(--oro); border-radius: var(--r-borde);
+  box-shadow: 0 5px 14px rgba(0,0,0,0.38);
+  font-family: var(--fuente-dis); text-align: center;
+  color: var(--tinta);
+  animation: aviso-in 0.28s ease both;
+}
+@keyframes aviso-in {
+  0% { opacity: 0; transform: translate(-50%, -8px); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
+}
+/* barras pequeñas de progreso (cola de formación) */
+.progreso {
+  flex: 1 1 auto; height: 10px; border-radius: 5px;
+  background: #16100c; overflow: hidden;
+}
+.progreso .lleno { display: block; height: 100%; background: var(--oro); }
+
+/* ---- fragua: leyendas no-color, celdas de símbolos, resultado ---- */
+.legend-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.legend-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: var(--t-xxs); text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--tinta-bla);
+  border: 1px solid var(--sepia); border-radius: 3px;
+  padding: 0.18rem 0.5rem; background: var(--perga-alto);
+}
+.legend-chip b { font-family: var(--fuente-mono); font-size: 0.95em; }
+.legend-chip .pleca-oro   { width: 1.15em; height: 0.55em; background:
+  repeating-linear-gradient(45deg, var(--oro-cl) 0 3px, var(--oro-osc) 3px 6px);
+  border: 1px solid var(--oro-osc); }
+.legend-chip .pleca-azul  { width: 1.15em; height: 0.55em; background:
+  repeating-linear-gradient(-45deg, #7fa6d0 0 3px, var(--azul-osc) 3px 6px);
+  border: 1px solid var(--azul-osc); }
+
+.symbol-cell {
+  display: inline-grid; place-items: center;
+  width: 40px; height: 40px; border: 2px solid var(--oro-osc);
+  border-radius: 4px; background: var(--perga-alto);
+  font-family: var(--fuente-dis); font-size: 1.5rem; color: var(--tinta);
+}
+.symbol-cell.ok { background: var(--oro-cl); color: var(--caron); border-color: var(--oro-osc); }
+.symbol-cell.act { outline: 3px solid var(--lacre); outline-offset: 2px; }
+
+/* ---- heraldo: fila de símbolos del puzle y estado del bosque ---- */
+.simbolo-row { display: flex; flex-wrap: wrap; gap: 0.55rem; justify-content: center; }
+.simbolo-row .symbol-cell { width: 46px; height: 46px; font-size: 1.7rem; }
+.puzle-estado {
+  margin-top: 0.5rem; font-size: var(--t-xs); color: var(--tinta-bla);
+  text-align: center; line-height: 1.4;
+}
+
+.grado-final {
+  font-family: var(--fuente-dis);
+  font-size: clamp(3.2rem, 15vw, 4.8rem); line-height: 1;
+  color: var(--oro-osc); letter-spacing: 0.06em;
+  margin: 0.15em 0;
+}
+.desglose {
+  display: grid; gap: 0.25rem;
+  text-align: left; font-size: var(--t-xs); color: var(--tinta-bla);
+  border-top: 1px dashed var(--sepia); margin-top: 0.7rem; padding-top: 0.6rem;
+}
+.desglose span { display: flex; justify-content: space-between; gap: 1rem; }
+
+@media (max-width: 430px) {
+  .cabecera h1 { font-size: clamp(1.55rem, 9vw, 2.2rem); letter-spacing: 0.02em; }
+  .menu { grid-template-columns: 1fr; }
+  .card h2 { font-size: var(--t-md); }
+  .controles { gap: 0.5rem; }
+  .tbtn { min-width: 74px; flex: 1 1 0; }
+}
+@media (min-width: 700px) {
+  .menu { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 400px) {
+  .overlay .panel-titulo h2 { font-size: var(--t-lg); }
+}
+
+/* fin de style.css */

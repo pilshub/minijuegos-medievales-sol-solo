@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tras las Almenas · Minijuegos Medievales</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="juego castillo">
+
+<div class="marco">
+
+  <a class="volver" href="index.html">Menú</a>
+  <h1 class="titulo-juego">Tras las Almenas</h1>
+
+  <!-- Pantalla de título (convenio del verificador) -->
+  <div class="overlay" id="mj-titulo">
+    <section class="panel-titulo">
+      <div class="reino">Territorio de Sol</div>
+      <div class="crest" role="img" aria-label="Escudo"></div>
+      <h2>Tras las Almenas</h2>
+      <div class="mecanica-texto">
+        <p>Defiende la muralla durante <strong>cinco oleadas</strong>. Antes de cada asalto asignas
+        la guarnición: espadas, arqueros y reparaciones. Cuando llegue la oleada, tus tropas luchan
+        solas; tú intercedes para reparar y reforzar.</p>
+        <ul>
+          <li><span aria-hidden="true">1</span> Asignar guarnición (espadas) — coste en oro.</li>
+          <li><span aria-hidden="true">2</span> Encargar arqueros — oro y madera, con tiempo de formación.</li>
+          <li><span aria-hidden="true">3</span> Reparar la muralla (nunca supera el 100%).</li>
+          <li><span aria-hidden="true">␣</span> Lanzar la siguiente oleada.</li>
+        </ul>
+        <p class="nota">Los aldeanos producen madera solos. Derrotar enemigos forja oro y cada tregua
+        premia tus reservas.</p>
+      </div>
+      <button class="btn btn-jugar" id="btn-jugar" aria-label="Jugar Tras las Almenas">JUGAR</button>
+      <p class="muted">Tu record de victoria se guarda en este dispositivo.</p>
+    </section>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud" id="mj-hud" hidden>
+    <span class="chip">🏰 <span class="etq">Muro</span> <span class="val" id="hud-muro">100%</span></span>
+    <span class="chip">🪙 <span class="val" id="hud-oro">34</span></span>
+    <span class="chip">🪵 <span class="val" id="hud-madera">10</span></span>
+    <span class="chip">🪨 <span class="val" id="hud-piedra">8</span></span>
+    <span class="chip">⚔ <span class="etq">Oleada</span> <span class="val" id="hud-oleada">1/5</span></span>
+    <span class="chip">💀 <span class="etq">Bajas</span> <span class="val" id="hud-bajas">0</span></span>
+    <div class="barra barra--lacre" role="progressbar" aria-label="Vida de la muralla" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" id="barra-muro">
+      <span class="lleno" id="fill-muro" style="width:100%"></span>
+    </div>
+  </div>
+
+  <!-- Escenario -->
+  <div class="escenario">
+    <canvas id="lienzo" width="640" height="360" aria-label="Campo de batalla: la muralla vista de perfil"></canvas>
+    <div class="manto" aria-hidden="true"></div>
+  </div>
+  <p class="nota-canvas" id="mini-estado" role="status" aria-live="polite">Preparándote…</p>
+
+  <!-- Paneles de reserva -->
+  <div class="paneles" id="mj-paneles" hidden>
+    <section class="panel">
+      <h4>Guarnición</h4>
+      <div class="filera"><span>Espadas</span><span class="val" id="pan-espadas">1</span></div>
+      <div class="filera"><span>Arqueros</span><span class="val" id="pan-arqueros">0</span></div>
+      <div class="progreso" id="forma-envol" hidden><span class="lleno" id="barra-forma" style="width:0%"></span></div>
+    </section>
+    <section class="panel">
+      <h4>Reserva</h4>
+      <div class="filera"><span>Monedas</span><span class="val" id="pan-monedas">34</span></div>
+      <div class="filera"><span>Madera</span><span class="val" id="pan-madera">10</span></div>
+      <div class="filera"><span>Piedra</span><span class="val" id="pan-piedra">8</span></div>
+      <div class="filera"><span>Muro</span><span class="val" id="pan-muro">100%</span></div>
+    </section>
+  </div>
+
+  <!-- Controles táctiles -->
+  <div class="controles" id="mj-controles" hidden>
+    <button class="tbtn" id="bt-asignar" aria-label="Reclutar una espada en la guarnición"><span class="tecla">1</span>Asignar</button>
+    <button class="tbtn" id="bt-flechas" aria-label="Encargar un arquero"><span class="tecla">2</span>Flechas</button>
+    <button class="tbtn" id="bt-reparar" aria-label="Reparar la muralla"><span class="tecla">3</span>Reparar</button>
+    <button class="tbtn tbtn--lacre" id="bt-oleada" aria-label="Lanzar la siguiente oleada"><span class="tecla">␣</span>Oleada</button>
+  </div>
+
+</div>
+
+<!-- Pantalla final (victoria/derrota) -->
+<div class="overlay" id="mj-fin" hidden>
+  <section class="panel-titulo panel--victoria">
+    <div class="reino">Territorio de Sol</div>
+    <div class="crest" role="img" aria-label="Escudo"></div>
+    <h2 id="fin-titulo">Victoria</h2>
+    <p id="fin-sub" class="muted">Las cinco oleadas han sido repelidas.</p>
+    <div class="datos-grid" id="fin-datos"></div>
+    <p class="record" id="fin-record"></p>
+    <button class="btn btn--oro btn-rejugar" id="btn-rejugar" aria-label="Jugar de nuevo">Jugar de nuevo</button>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = document.getElementById.bind(document);
+  var lienzo = $("lienzo");
+  var ctx = lienzo.getContext("2d");
+  var reduce = (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  /* ------------------------------------------------------------------
+     Geometría lógica (canvas 640x360)
+     ------------------------------------------------------------------ */
+  var W = 640, H = 360, G = 288;          // suelo en y=288
+  var MURALLA_X = 366;                    // cara frontal de la muralla
+  var GOLPE_X = 330;                      // donde se detienen los enemigos a asaltar
+  var PUERTA_X = 432;                     // centro de arte de la puerta
+
+  /* ------------------------------------------------------------------
+     Economía
+     ------------------------------------------------------------------ */
+  var MURO_MAX = 100;
+  var COSTO_ESPADA = 12;
+  var COSTO_ARCO_ORO = 12, COSTO_ARCO_MADERA = 6;
+  var TIEMPO_FORMA = 3.6;
+  var COSTO_REPARO_ORO = 3, COSTO_REPARO_PIEDRA = 4, REPARO_CURA = 6;
+  var TIC_ALDEANO = 2.4, MADERA_ALDEANO = 1;
+  var DPS_ESPADA = 6, DANO_ARCO = 9;
+  var BONO_BASE = 4;
+  var ORO_MUERTO = { inf: 6, ariete: 16, torre: 22 };
+
+  /* ------------------------------------------------------------------
+     Enemigos: hp, velocidad, daño a muralla, cadencia, altura de arte
+     ------------------------------------------------------------------ */
+  var EST = {
+    inf:    { hp: 34,  spd: 20, dmg: 6,  cd: 2.2, h: 26 },
+    ariete: { hp: 110, spd: 8,  dmg: 17, cd: 2.1, h: 30 },
+    torre:  { hp: 180, spd: 4,  dmg: 9,  cd: 0.5, h: 92 }
+  };
+
+  function composicion(n) {
+    if (n === 1) return { inf: 7 };
+    if (n === 2) return { inf: 8, ariete: 1 };
+    if (n === 3) return { inf: 5, ariete: 2 };          // pico
+    if (n === 4) return { inf: 7, ariete: 1, torre: 1 }; // recuperación
+    if (n === 5) return { inf: 4, ariete: 2, torre: 2 }; // asalto final
+    return { inf: 4, ariete: 1, torre: 1 };
+  }
+
+  /* ------------------------------------------------------------------
+     Estado de partida
+     ------------------------------------------------------------------ */
+  var estado = "titulo";     // titulo | prep | oleada | victoria | derrota
+  var muro, oro, madera, piedra, espadas, arqueros, oleada, bajas;
+  var cola = [], enemigos = [], flechas = [], particulas = [];
+  var formando = [];         // arqueros en formación {p}
+  var aldeanoT = 0, fireT = 0, spawnT = 0, tiempoJuego = 0;
+
+  var rafId = 0, rafCorriendo = false, pausado = false, ultimoT = 0;
+
+  function nuevoDt(ahora) {
+    var dt = (ahora - ultimoT) / 1000;
+    ultimoT = ahora;
+    return Math.min(dt, 0.05);
+  }
+
+  /* ------------------------------------------------------------------
+     Toast y feedback
+     ------------------------------------------------------------------ */
+  var toastEl = null;
+  function toast(txt, ms) {
+    if (toastEl) toastEl.remove();
+    toastEl = document.createElement("div");
+    toastEl.className = "aviso";
+    toastEl.textContent = txt;
+    document.body.appendChild(toastEl);
+    setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, ms || 2000);
+  }
+  function flash(b) { b.classList.remove("is-flash"); void b.offsetWidth; b.classList.add("is-flash"); }
+  function termino() { return estado === "victoria" || estado === "derrota"; }
+
+  /* ------------------------------------------------------------------
+     Acciones de los botones (jamás disabled; si no aplica, feedback)
+     ------------------------------------------------------------------ */
+  function accionAsignar() {
+    if (termino()) return;
+    if (oro >= COSTO_ESPADA) { oro -= COSTO_ESPADA; espadas++; toast("⚔ Guarnición reforzada"); }
+    else { toast("Sin monedas para la espada (12)"); flash($("bt-asignar")); }
+    sincronizarHUD();
+  }
+  function accionArqueros() {
+    if (termino()) return;
+    if (formando.length >= 3) { toast("Cuartel lleno: espera la formación"); flash($("bt-flechas")); return; }
+    if (oro >= COSTO_ARCO_ORO && madera >= COSTO_ARCO_MADERA) {
+      oro -= COSTO_ARCO_ORO; madera -= COSTO_ARCO_MADERA;
+      formando.push({ p: 0 });
+      toast("🏹 Arquero en formación");
+    } else { toast("Faltan 12 monedas y 6 madera"); flash($("bt-flechas")); }
+    sincronizarHUD();
+  }
+  function accionReparar() {
+    if (termino()) return;
+    if (muro >= MURO_MAX) { toast("La muralla está intacta"); flash($("bt-reparar")); chispas(PUERTA_X, G - 12, 6, "oro"); sincronizarHUD(); return; }
+    if (oro >= COSTO_REPARO_ORO && piedra >= COSTO_REPARO_PIEDRA) {
+      oro -= COSTO_REPARO_ORO; piedra -= COSTO_REPARO_PIEDRA;
+      muro = Math.min(MURO_MAX, muro + REPARO_CURA);
+      toast("🧱 Muralla reparada");
+      chispas(PUERTA_X, G - 8, 8, "oro");
+    } else { toast("Faltan 3 monedas y 4 piedra"); flash($("bt-reparar")); }
+    sincronizarHUD();
+  }
+  function accionOleada() {
+    if (termino()) return;
+    if (estado === "prep") iniciarOleada();
+    else { toast("La horda ya combate"); flash($("bt-oleada")); }
+  }
+
+  /* ------------------------------------------------------------------
+     Oleadas
+     ------------------------------------------------------------------ */
+  function iniciarOleada() {
+    estado = "oleada";
+    cola.length = 0;
+    var comp = composicion(oleada);
+    Object.keys(comp).forEach(function (t) {
+      for (var i = 0; i < comp[t]; i++) cola.push(t);
+    });
+    for (var i = cola.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = cola[i]; cola[i] = cola[j]; cola[j] = tmp;
+    }
+    spawnT = 0.7;
+    toast("📯 Oleada " + oleada);
+    sincronizarHUD();
+  }
+
+  function terminarOleada() {
+    var bono = BONO_BASE + Math.floor(oro / 3) + Math.floor(madera / 3) + Math.floor(piedra / 4);
+    oro += bono;
+    sincronizarHUD();
+    if (oleada >= 5) { victoria(); return; }
+    oleada++;
+    estado = "prep";
+    toast("☕ Tregua · +" + bono + " monedas");
+    sincronizarHUD();
+  }
+
+  function spawnEnemigo(tipo) {
+    var s = EST[tipo];
+    enemigos.push({ tipo: tipo, x: -30, hp: s.hp, maxHp: s.hp, cd: 0.6, muerto: false });
+  }
+
+  /* ------------------------------------------------------------------
+     Combate
+     ------------------------------------------------------------------ */
+  function herir(e, dmg) {
+    if (!e || e.muerto) return;
+    e.hp -= dmg;
+    if (e.hp <= 0) {
+      e.muerto = true;
+      if (e.x > 0) { bajas++; oro += ORO_MUERTO[e.tipo]; }
+      esquirla(e.x, G - 18, e.tipo === "torre" ? 12 : 6);
+    }
+  }
+
+  function combate(dt) {
+    if (estado !== "oleada") return;
+
+    for (var i = formando.length - 1; i >= 0; i--) {
+      formando[i].p += dt / TIEMPO_FORMA;
+      if (formando[i].p >= 1) { formando.splice(i, 1); arqueros++; }
+    }
+
+    // disparos
+    fireT -= dt;
+    if (fireT <= 0 && arqueros > 0) {
+      var t = mejorBlanco();
+      if (t) {
+        for (var f = 0; f < Math.min(arqueros, 6); f++) {
+          flechas.push({ x: MURALLA_X + 44 + f * 12, y: 124, tx: t.x, ty: t.y });
+        }
+        fireT = 0.8 / Math.max(0.4, arqueros * 0.6);
+      }
+    }
+
+    // vuelo de flechas
+    for (var a = flechas.length - 1; a >= 0; a--) {
+      var fl = flechas[a];
+      var ob = objetivoCercano(fl.tx, fl.ty);
+      fl.tx = ob ? ob.x : fl.tx;
+      fl.ty = ob ? (G - EST[ob.tipo].h + 8) : fl.ty;
+      var dx = fl.tx - fl.x, dy = fl.ty - fl.y;
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 1) { fl.x += dx / len * 440 * dt; fl.y += dy / len * 440 * dt; }
+      if (len < 10) { if (ob) herir(ob, DANO_ARCO); flechas.splice(a, 1); }
+    }
+
+    // cuerpo a cuerpo de las espadas
+    if (espadas > 0) {
+      var m = combatiente();
+      if (m) herir(m, DPS_ESPADA * espadas * dt);
+    }
+
+    // enemigos: avanzar + asaltar
+    for (var e = enemigos.length - 1; e >= 0; e--) {
+      var en = enemigos[e];
+      if (en.muerto) { enemigos.splice(e, 1); continue; }
+      if (en.x < GOLPE_X) {
+        en.x += EST[en.tipo].spd * dt;
+      } else {
+        en.cd -= dt;
+        if (en.cd <= 0) {
+          en.cd = EST[en.tipo].cd;
+          muro = Math.max(0, muro - EST[en.tipo].dmg);
+          esquirla(en.x, G - EST[en.tipo].h / 2, 6);
+          if (muro <= 0) { derrota(); return; }
+        }
+      }
+    }
+
+    // spawn
+    spawnT -= dt;
+    if (spawnT <= 0 && cola.length > 0) { spawnEnemigo(cola.shift()); spawnT = 0.85; }
+
+    if (cola.length === 0 && enemigos.length === 0) terminarOleada();
+  }
+
+  function mejorBlanco() {
+    var best = null, mx = -1e9;
+    for (var i = 0; i < enemigos.length; i++) {
+      if (!enemigos[i].muerto && enemigos[i].x > mx) { mx = enemigos[i].x; best = enemigos[i]; }
+    }
+    return best;
+  }
+  function combatiente() {
+    var best = null, dmin = 1e9;
+    for (var i = 0; i < enemigos.length; i++) {
+      var d = Math.abs(enemigos[i].x - (GOLPE_X + 10));
+      if (!enemigos[i].muerto && d < dmin) { dmin = d; best = enemigos[i]; }
+    }
+    return best;
+  }
+  function objetivoCercano(x, y) {
+    var best = null, dmin = 1e9;
+    for (var i = 0; i < enemigos.length; i++) {
+      var e = enemigos[i];
+      if (e.muerto) continue;
+      var oy = G - EST[e.tipo].h + 8;
+      var d = (e.x - x) * (e.x - x) + (oy - y) * (oy - y);
+      if (d < dmin) { dmin = d; best = e; }
+    }
+    return best;
+  }
+
+  /* ------------------------------------------------------------------
+     Partículas
+     ------------------------------------------------------------------ */
+  function esquirla(x, y, f) {
+    if (reduce || particulas.length > CAP_PART) return;
+    for (var i = 0; i < 6; i++) {
+      particulas.push({
+        x: x, y: y, vx: (Math.random() - 0.5) * 70, vy: -Math.random() * 90 - 24,
+        r: 2 + Math.random() * 2, life: 0.55, max: 0.85,
+        col: f > 9 ? [200, 120, 60] : [160, 140, 100]
+      });
+    }
+  }
+  function chispas(x, y, n, pal) {
+    if (reduce || particulas.length > CAP_PART) return;
+    for (var i = 0; i < n; i++) {
+      particulas.push({
+        x: x, y: y, vx: (Math.random() - 0.5) * 100, vy: -Math.random() * 120 - 20,
+        r: 2 + Math.random() * 2, life: 0.4, max: 0.7,
+        col: pal === "oro" ? [240, 210, 120] : [255, 180, 90]
+      });
+    }
+  }
+
+  // constante compartida de cap de partículas (ambas creadoras consentron en el mismo tope)
+  var CAP_PART = 140;
+
+  /* ------------------------------------------------------------------
+     HUD
+     ------------------------------------------------------------------ */
+  function r(x) { return Math.max(0, Math.round(x)); }
+  function sincronizarHUD() {
+    set("hud-muro", r(muro) + "%");
+    $("fill-muro").style.width = r(muro) + "%";
+    $("barra-muro").setAttribute("aria-valuenow", String(r(muro)));
+    set("hud-oro", oro); set("hud-madera", madera); set("hud-piedra", piedra);
+    set("hud-oleada", oleada + "/5"); set("hud-bajas", bajas);
+    set("pan-espadas", espadas); set("pan-arqueros", arqueros);
+    set("pan-monedas", oro); set("pan-madera", madera); set("pan-piedra", piedra);
+    set("pan-muro", r(muro) + "%");
+
+    var ev = $("forma-envol");
+    if (formando.length > 0) { ev.hidden = false; $("barra-forma").style.width = Math.round(formando[0].p * 100) + "%"; }
+    else ev.hidden = true;
+
+    $("mini-estado").textContent = estado === "oleada"
+      ? "⚔ Oleada " + oleada + " — Espadas " + espadas + " · Arqueros " + arqueros + " · Bajas " + bajas
+      : estado === "prep" ? "☕ Oleada " + oleada + "/5 — asigna y lanza 🎺" : estado;
+  }
+  function set(id, val) { document.getElementById(id).textContent = val; }
+
+  /* ------------------------------------------------------------------
+     Dibujo
+     ------------------------------------------------------------------ */
+  function colorCielo(t) {
+    t = Math.max(0, Math.min(1, t));
+    var a = [120, 150, 215], b = [56, 28, 24];
+    return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+  }
+
+  function pintar(dt) {
+    ctx.save();
+    ctx.scale(lienzo.width / W, lienzo.height / H);
+
+    var t = estado === "oleada" ? Math.min(1, (oleada - 1) / 4) : 0;
+    var cielo = colorCielo(t);
+    var grad = ctx.createLinearGradient(0, 0, 0, G);
+    grad.addColorStop(0, "rgb(" + cielo[0] + "," + cielo[1] + "," + cielo[2] + ")");
+    grad.addColorStop(0.55, "#e6d2ae");
+    grad.addColorStop(1, "#d3b57c");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, G);
+
+    // sol
+    ctx.beginPath(); ctx.arc(80, 120, 26, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,224,150,0.95)"; ctx.fill();
+
+    // lejanía
+    ctx.fillStyle = "rgba(90,70,45,0.3)";
+    ctx.beginPath(); ctx.moveTo(0, G); ctx.quadraticCurveTo(W * 0.3, G - 50, W * 0.6, G - 26); ctx.lineTo(W, G); ctx.closePath(); ctx.fill();
+
+    // tierra
+    ctx.fillStyle = "#7a5b37"; ctx.fillRect(0, G, W, H - G);
+    ctx.fillStyle = "rgba(40,26,12,0.2)";
+    for (var i = 0; i < 40; i++) ctx.fillRect((i * 31) % W, G + 2 + (i * 7) % 22, 3, 2);
+
+    // muralla
+    ctx.fillStyle = muro >= MURO_MAX * 0.5 ? "#a68b6b" : "#8f7152";
+    ctx.fillRect(MURALLA_X, 108, W - MURALLA_X, G - 108);
+    ctx.fillStyle = "rgba(40,26,15,0.4)";
+    for (var y = 118; y < G; y += 13) ctx.fillRect(MURALLA_X, y, W - MURALLA_X, 1);
+    ctx.fillStyle = "#8f7152";
+    for (var m = MURALLA_X; m < W; m += 26) ctx.fillRect(m, 120, 14, 10);
+    // bastión
+    ctx.fillStyle = "#9a7d5c"; ctx.fillRect(W - 64, 150, 64, G - 150);
+    ctx.fillStyle = "#8f7152";
+    for (var m2 = W - 64; m2 < W; m2 += 20) ctx.fillRect(m2, 158, 12, 9);
+
+    // puerta
+    ctx.fillStyle = "#3e2818";
+    ctx.beginPath(); ctx.moveTo(PUERTA_X - 26, G); ctx.lineTo(PUERTA_X - 26, G - 46); ctx.arc(PUERTA_X, G - 46, 26, Math.PI, 0); ctx.lineTo(PUERTA_X + 26, G); ctx.closePath(); ctx.fill();
+
+    bandera();
+    dibujarEspadas();
+    for (var ej = 0; ej < enemigos.length; ej++) dibujarEnemigo(enemigos[ej]);
+
+    // flechas
+    ctx.strokeStyle = "#3a2413"; ctx.lineWidth = 1.6;
+    for (var k = 0; k < flechas.length; k++) {
+      ctx.beginPath(); ctx.moveTo(flechas[k].x, flechas[k].y); ctx.lineTo(flechas[k].x - 9, flechas[k].y + 7); ctx.stroke();
+    }
+
+    // partículas (avanzan con el dt real ya acotado por nuevoDt)
+    for (var p = particulas.length - 1; p >= 0; p--) {
+      var pt = particulas[p];
+      pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 50 * dt;
+      if (pt.life <= 0) { particulas.splice(p, 1); continue; }
+      var al = Math.max(0, pt.life / pt.max);
+      ctx.globalAlpha = al;
+      ctx.fillStyle = "rgb(" + pt.col.join(",") + ")";
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * (0.4 + al), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // viñeta
+    ctx.fillStyle = "rgba(30,20,10,0.08)"; ctx.fillRect(0, 0, W, H);
+
+    // etiqueta superior
+    ctx.fillStyle = estado === "oleada" ? "#a33024" : "#2e4a74";
+    ctx.font = "bold 17px Georgia, serif";
+    ctx.fillText((estado === "oleada" ? "⚔ OLEADA " : "☕ OLEADA ") + oleada + " / 5", 16, 24);
+
+    ctx.restore();
+  }
+
+  function bandera() {
+    ctx.strokeStyle = "#241f1a"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(PUERTA_X, 60); ctx.lineTo(PUERTA_X + 34, 74); ctx.lineTo(PUERTA_X, 84); ctx.closePath();
+    ctx.fillStyle = "#a33024"; ctx.fill();
+  }
+
+  function dibujarEspadas() {
+    var n = Math.min(espadas, 12);
+    for (var i = 0; i < n; i++) {
+      var x = PUERTA_X - 52 + (i % 4) * 13;
+      var y = G - 24 - Math.floor(i / 4) * 5;
+      ctx.fillStyle = "#6a4a2a"; ctx.fillRect(x - 4, y - 12, 8, 15);
+      ctx.fillStyle = "#c9b98b"; ctx.beginPath(); ctx.arc(x, y - 14, 5, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = "#cfcfcf"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x + 4, y - 6); ctx.lineTo(x + 4, y - 20); ctx.stroke();
+    }
+  }
+
+  function dibujarEnemigo(e) {
+    var s = EST[e.tipo], x = e.x, yb = G;
+    if (e.tipo === "inf") {
+      ctx.fillStyle = "#9a2a20"; ctx.fillRect(x - 5, yb - 24, 10, 18);
+      ctx.fillStyle = "#6e1c13"; ctx.fillRect(x - 5, yb - 24, 4, 16);
+      ctx.fillStyle = "#c9b9a0"; ctx.beginPath(); ctx.arc(x, yb - 27, 5, Math.PI, 0); ctx.fill();
+    } else if (e.tipo === "ariete") {
+      ctx.fillStyle = "#5a3c28"; ctx.fillRect(x - 30, yb - 16, 52, 10);
+      ctx.fillStyle = "#3a2c1a"; ctx.beginPath(); ctx.arc(x - 26, yb - 11, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#8a6a46"; ctx.beginPath(); ctx.arc(x + 26, yb - 6, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#241f1a"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x - 26, yb - 12); ctx.lineTo(x + 4, yb - 10); ctx.moveTo(x + 8, yb - 10); ctx.lineTo(x + 26, yb - 8); ctx.stroke();
+    } else {
+      ctx.fillStyle = "#6e4f2f"; ctx.fillRect(x - 16, yb - 86, 32, 86);
+      ctx.fillStyle = "#5a3c28"; ctx.fillRect(x - 16, yb - 86, 32, 9); ctx.fillRect(x - 16, yb - 56, 32, 9);
+      ctx.fillStyle = "#3a2c1a"; ctx.beginPath(); ctx.moveTo(x - 20, yb - 86); ctx.lineTo(x, yb - 100); ctx.lineTo(x + 20, yb - 86); ctx.closePath(); ctx.fill();
+    }
+    if (e.hp < e.maxHp) {
+      var w = e.tipo === "inf" ? 12 : 24;
+      var by = yb - (e.tipo === "inf" ? 50 : 110);
+      ctx.fillStyle = "#16100c"; ctx.fillRect(x - w / 2, by - 6, w, 3);
+      ctx.fillStyle = e.hp / e.maxHp > 0.3 ? "#8fae5a" : "#c0392b";
+      ctx.fillRect(x - w / 2, by - 6, w * Math.max(0, e.hp / e.maxHp), 3);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     Bucle principal
+     ------------------------------------------------------------------ */
+  function bucle(ahora) {
+    if (!rafCorriendo) return;
+    if (pausado) { rafId = requestAnimationFrame(bucle); return; }
+    var dt = nuevoDt(ahora);
+    var esOleada = estado === "oleada";
+    if (esOleada) combate(dt);
+
+    // producción pasiva de madera (aldeanos) y cronómetro
+    tiempoJuego += dt;
+    aldeanoT -= dt;
+    if (aldeanoT <= 0) { madera += MADERA_ALDEANO; aldeanoT = TIC_ALDEANO; sincronizarHUD(); }
+    if (esOleada) sincronizarHUD();
+
+    pintar(dt);
+    rafId = requestAnimationFrame(bucle);
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    pausado = document.hidden;
+    if (!pausado) ultimoT = performance.now();
+  });
+
+  /* ------------------------------------------------------------------
+     Inicio / reinicio
+     ------------------------------------------------------------------ */
+  function reset() {
+    muro = MURO_MAX; oro = 34; madera = 10; piedra = 8;
+    espadas = 1; arqueros = 0; oleada = 1; bajas = 0;
+    cola.length = 0; enemigos.length = 0; flechas.length = 0; particulas.length = 0; formando.length = 0;
+    aldeanoT = TIC_ALDEANO; fireT = 0; spawnT = 0.7; tiempoJuego = 0;
+  }
+
+  function iniciarLoop() {
+    if (rafCorriendo) cancelAnimationFrame(rafId);
+    rafCorriendo = true; ultimoT = performance.now();
+    rafId = requestAnimationFrame(bucle);
+  }
+  function detenerLoop() { rafCorriendo = false; if (rafId) cancelAnimationFrame(rafId); }
+
+  function empiezaJuego() {
+    $("mj-titulo").classList.add("is-hidden");
+    $("mj-hud").hidden = false;
+    $("mj-paneles").hidden = false;
+    $("mj-controles").hidden = false;
+    $("mj-fin").hidden = true;
+    reset();
+    estado = "prep";
+    sincronizarHUD();
+    ajustarLienzo();
+    iniciarLoop();
+  }
+
+  /* ------------------------------------------------------------------
+     Resultados
+     ------------------------------------------------------------------ */
+  function finalizar(ganado, titulo, sub) {
+    detenerLoop();
+    estado = ganado ? "victoria" : "derrota";
+    var pts = calcularPuntos();
+    var key = "minijuegos-medievales.castillo.record";
+    var previo = 0;
+    try { previo = parseInt(localStorage.getItem(key) || "0", 10) || 0; } catch (e) {}
+    if (ganado && pts > previo) { try { localStorage.setItem(key, String(pts)); } catch (e) {} }
+
+    // aspecto del panel final: victoria = dorado, derrota = lacre/rojo
+    var panel = $("mj-fin").querySelector(".panel-titulo");
+    panel.classList.toggle("panel--victoria", !!ganado);
+    panel.classList.toggle("panel--derrota", !ganado);
+
+    $("fin-titulo").textContent = titulo;
+    $("fin-sub").textContent = sub;
+    $("fin-record").textContent = ganado
+      ? (previo ? "Record anterior: " + previo : "¡Nuevo record guardado!")
+      : "Record por victoria: " + previo;
+
+    var grid = $("fin-datos");
+    grid.innerHTML = "";
+    [
+      [pts, "Puntuación"],
+      [Math.max(0, Math.round(muro)), "Muralla restante"],
+      [bajas, "Bajas de la horda"],
+      [oro + madera + piedra, "Reserva total"]
+    ].forEach(function (c) {
+      var d = document.createElement("div");
+      d.innerHTML = "<span>" + c[1] + "</span><b>" + c[0] + "</b>";
+      grid.appendChild(d);
+    });
+    $("mj-fin").hidden = false;
+  }
+
+  function calcularPuntos() {
+    return Math.round(muro * 2 + bajas * 1.6 + (oro + madera + piedra) * 0.9 + Math.max(0, 240 - tiempoJuego) * 1.4);
+  }
+  function victoria() { finalizar(true, "La defensa resiste", "Cinco oleadas repelidas. Reina la calma al otro lado del valle."); }
+  function derrota() { finalizar(false, "La muralla cae", "La horda irrumpió en la " + oleada + "ª oleada. Vuelve a intentarlo."); }
+
+  /* ------------------------------------------------------------------
+     Canvas
+     ------------------------------------------------------------------ */
+  function ajustarLienzo() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = lienzo.getBoundingClientRect();
+    if (r.width > 0) { lienzo.width = Math.round(r.width * dpr); lienzo.height = Math.round(r.height * dpr); }
+  }
+  window.addEventListener("resize", ajustarLienzo);
+  window.addEventListener("orientationchange", ajustarLienzo);
+
+  /* ------------------------------------------------------------------
+     Eventos
+     ------------------------------------------------------------------ */
+  $("btn-jugar").addEventListener("click", empiezaJuego);
+  $("btn-rejugar").addEventListener("click", empiezaJuego);
+  $("bt-asignar").addEventListener("click", function (ev) { flash(ev.currentTarget); accionAsignar(); });
+  $("bt-flechas").addEventListener("click", function (ev) { flash(ev.currentTarget); accionArqueros(); });
+  $("bt-reparar").addEventListener("click", function (ev) { flash(ev.currentTarget); accionReparar(); });
+  $("bt-oleada").addEventListener("click", function (ev) { flash(ev.currentTarget); accionOleada(); });
+
+  window.addEventListener("keydown", function (ev) {
+    if (ev.repeat) return;
+    var k = ev.key;
+    if (estado === "titulo") { if (k === "Enter") empiezaJuego(); return; }
+    if (estado === "victoria" || estado === "derrota") {
+      if (k === "Enter" || k === " ") { ev.preventDefault(); empiezaJuego(); }
+      return;
+    }
+    if (k === " " || k === "ArrowUp" || k === "ArrowDown") ev.preventDefault();
+    if (k === "1" || k === "ArrowUp") accionAsignar();
+    else if (k === "2") accionArqueros();
+    else if (k === "3" || k === "ArrowDown") accionReparar();
+    else if (k === " " || k === "ArrowRight") accionOleada();
+  });
+
+  reset();
+  sincronizarHUD();
+})();
+</script>
+
+</body>
+</html>

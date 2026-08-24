@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>La Fragua del Herrero · Minijuegos Medievales</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="juego fragua">
+
+<div class="marco">
+
+  <a class="volver" href="index.html">Menú</a>
+  <h1 class="titulo-juego">La Fragua del Herrero</h1>
+
+  <!-- Pantalla de título (convenio del verificador) -->
+  <div class="overlay" id="mj-titulo">
+    <section class="panel-titulo">
+      <div class="reino">Herramienta de Sol</div>
+      <div class="crest" role="img" aria-label="Escudo"></div>
+      <h2>La Fragua del Herrero</h2>
+      <div class="mecanica-texto">
+        <p>Forja la mejor hoja posible con <strong>pocos golpes bien medidos</strong>. Cada espada
+        pasa por cuatro ciclos artesanales: <strong>forja a precisión → templado → pulido</strong>.</p>
+        <ul>
+          <li><span aria-hidden="true">◀</span> Martillo: golpea solo en la zona dorada (2 veces útil mínimo).</li>
+          <li><span aria-hidden="true">▲</span> Templar: pasa al templado cuando la hoja tenga trabajo.</li>
+          <li><span aria-hidden="true">▼</span> Agua: sumerge la hoja cuando el marcador esté en azul.</li>
+          <li><span aria-hidden="true">␣</span> Entregar: confirma el patrón de lima y cierra el ciclo.</li>
+        </ul>
+        <p class="nota">Machacar fuera de zona yerra la hoja: cada fallo cuenta más. Los ciclos suben
+        de ritmo; el cuarto es tu examen final.</p>
+      </div>
+      <button class="btn btn-jugar" id="btn-jugar" aria-label="Empezar a forjar">JUGAR</button>
+      <p class="muted">Tu mejor calidad (S→E) se guarda en este dispositivo.</p>
+    </section>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud" id="mj-hud" hidden>
+    <span class="chip">⚒ <span class="etq">Ciclo</span> <span class="val" id="hud-ciclo">1/4</span></span>
+    <span class="chip">🛠 <span class="etq">Fase</span> <span class="val" id="hud-fase">Forja</span></span>
+    <span class="chip">⬤ <span class="etq">Calidad</span> <span class="val" id="hud-cal">0</span></span>
+    <span class="chip">🗡 <span class="etq">Letra</span> <span class="val" id="hud-letra">E</span></span>
+  </div>
+
+  <!-- Escenario -->
+  <div class="escenario">
+    <canvas id="lienzo" width="640" height="360" aria-label="La fragua: la hoja, el yunque y el marcador de calentamiento"></canvas>
+    <div class="manto" aria-hidden="true"></div>
+  </div>
+  <p class="nota-canvas" id="linea-fase" role="status" aria-live="polite">Forja · Ciclo 1 · Golpea en la zona dorada</p>
+
+  <!-- Paneles: objetivo, calidad y leyenda no-dependiente-de-color -->
+  <div class="paneles" id="mj-paneles" hidden>
+    <section class="panel">
+      <h4>Calidad de la hoja</h4>
+      <div class="barra barra--oro" role="progressbar" aria-label="Calidad acumulada" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="barra-cal">
+        <span class="lleno" id="fill-cal" style="width:0%"></span>
+      </div>
+      <p class="tenue" id="panel-objetivo">◀ golpea en dorado · necesidad 2 golpes</p>
+    </section>
+    <section class="panel">
+      <h4>Zonas (patrón, no solo color)</h4>
+      <div class="legend-row">
+        <span class="legend-chip"><b>◇</b><span class="pleca-oro"></span>perfecta</span>
+        <span class="legend-chip"><b>▦</b><span class="pleca-oro"></span>dorada</span>
+        <span class="legend-chip"><b>▤</b><span class="pleca-azul"></span>azul ideal</span>
+      </div>
+      <p class="tenue" id="panel-ayuda"><span id="panel-molde"></span></p>
+    </section>
+  </div>
+
+  <!-- Controles táctiles -->
+  <div class="controles" id="mj-controles" hidden>
+    <button class="tbtn tbtn--oro" id="bt-martillo" aria-label="Golpear con el martillo"><span class="bt-label">Martillo</span><span class="tecla">◀</span></button>
+    <button class="tbtn" id="bt-templar" aria-label="Templar la hoja"><span class="bt-label">Templar</span><span class="tecla">▲</span></button>
+    <button class="tbtn" id="bt-agua" aria-label="Sumergir la hoja en agua"><span class="bt-label">Agua</span><span class="tecla">▼</span></button>
+    <button class="tbtn tbtn--oro" id="bt-entregar" aria-label="Entregar / cerrar el ciclo"><span class="bt-label">Entregar</span><span class="tecla">␣</span></button>
+  </div>
+
+</div>
+
+<!-- Pantalla final -->
+<div class="overlay" id="mj-fin" hidden>
+  <section class="panel-titulo panel--victoria">
+    <div class="reino">Herramienta de Sol</div>
+    <div class="grado-final" id="fin-grado">S</div>
+    <h2 id="fin-titulo">Hoja terminada</h2>
+    <div class="barra barra--oro" id="fin-barra" role="progressbar" aria-label="Calidad final" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+      <span class="lleno" id="fin-fill" style="width:0%"></span>
+    </div>
+    <div class="desglose" id="fin-desglose"></div>
+    <p class="record" id="fin-record"></p>
+    <button class="btn btn--oro btn-rejugar" id="btn-rejugar" aria-label="Forjar otra hoja">Forjar otra</button>
+  </section>
+</div>
+
+<script>
+/* ====================================================================
+   LA FRAGUA DEL HERRERO — rompecabezas de ritmo y precisión.
+   Flujo: título → ciclo 1..4 (Forja → Templado → Pulido) → resultado.
+   Un rAF con dt acotado, pausa por visibilitychange, canvas DPR.
+   Sin dependencias ni red. IDs obligatorios respetados. Jamás disabled.
+   ==================================================================== */
+(function () {
+  "use strict";
+
+  var $ = document.getElementById.bind(document);
+  var lienzo = $("lienzo");
+  var ctx = lienzo.getContext("2d");
+  var reduce = (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  // ---- geometría del lienzo (lógica) ----
+  var W = 640, H = 360, GR = 320;               // suelo del taller
+
+  // ---- progresión y zonas ----
+  var CICLO_MAX = 4;
+  var SIM = ["◇", "✣", "≈"];                    // símbolos robustos de lima
+  var MAPA = { martillo: 0, templar: 1, agua: 2 };
+  var PERIODO_BASE = 2.6;                        // s por oscilación completa
+  var GOLD_C = 0.5;                              // centro de zona dorada en [0,1]
+  var TPL_C = 0.62;                              // centro ideal de templado
+
+  // ---- estado de la partida ----
+  var estado = "titulo";    // titulo | juego | fin
+  var fase = "forja";       // forja | templado | pulido
+  var ciclo = 1;
+
+  var calidad = 0;          // 0..100 acumulada
+  var tFase = 0;            // tiempo dentro de la fase
+  var tBar = 0;             // acumulador de la oscilación térmica
+  var tTemp = 0;            // tiempo de templado
+  var golpeZona = 0;        // golpes útiles en EL ciclo actual
+  var golpeMal = 0;         // golpes malos en el ciclo actual
+  var golpeTot = 0;         // golpes totales en el ciclo actual
+
+  var pulSec = [];          // secuencia de pulido del ciclo
+  var pulPos = 0, pulErr = 0;
+
+  // totales para el desglose final
+  var forjaPerf = 0, forjaBueno = 0, forjaMal = 0;
+  var templPerf = 0, templBueno = 0, templLejos = 0;
+  var puliErrTot = 0, penalTot = 0;
+
+  var chispas = [], vapor = [], grietas = [];
+
+  var mensaje = "", mensajeT = 0;   // mensaje de fase persistente (DOM)
+  var avisoTexto = "", avisoT = 0;  // aviso destacado en canvas
+
+  // ---- loop ----
+  var rafId = 0, rafCorriendo = false, pausado = false, ultimoT = 0;
+
+  function nuevoDt(ahora) { var dt = (ahora - ultimoT) / 1000; ultimoT = ahora; return Math.min(dt, 0.05); }
+
+  /* ------------------------------------------------------------------
+     Utilidades de UI
+     ------------------------------------------------------------------ */
+  var toastEl = null;
+  function toast(txt, ms) {
+    if (toastEl) toastEl.remove();
+    toastEl = document.createElement("div");
+    toastEl.className = "aviso";
+    toastEl.textContent = txt;
+    document.body.appendChild(toastEl);
+    setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, ms || 1700);
+  }
+  function flash(b) { b.classList.remove("is-flash"); void b.offsetWidth; b.classList.add("is-flash"); }
+
+  function letra(q) {
+    if (q >= 95) return "S";
+    if (q >= 82) return "A";
+    if (q >= 68) return "B";
+    if (q >= 54) return "C";
+    if (q >= 40) return "D";
+    return "E";
+  }
+
+  /* ------------------------------------------------------------------
+     Geometría derivada (sobre la que se dibuja el tiempo/frase)
+     ------------------------------------------------------------------ */
+  function periodo() { return PERIODO_BASE - (ciclo - 1) * 0.35; }
+  function factor()  { return Math.max(0.62, 1 - (ciclo - 1) * 0.12); }
+  function anchoGold() { return 0.12 * factor(); }
+  function anchoPerf() { return 0.045 * factor(); }
+  function oroPos() { return GOLD_C + 0.5 * Math.sin(tBar * 2 * Math.PI / periodo()); }
+
+  /* ------------------------------------------------------------------
+     ACCIONES DE LOS 4 BOTONES (nunca disabled; siempre feedback)
+     ------------------------------------------------------------------ */
+  function accionMartillo() {
+    if (estado === "fin") return;
+    if (fase !== "forja") {
+      if (fase === "pulido") {
+        empujeLima("martillo");
+      } else {
+        toast("La hoja aún no está en la forja"); flash($("bt-martillo")); return;
+      }
+      return;
+    }
+    golpeTot++;
+    var pos = oroPos();
+    var d = Math.abs(pos - GOLD_C);
+    var extra = golpeZona > 2;    // 3+ golpes útiles rinden menos (machacar no premia)
+    if (d <= anchoPerf()) {
+      var g = extra ? 2 : 7;
+      calidad = clampAdd(calidad, g);
+      golpeZona++; forjaPerf++;
+      mensaje = (extra ? "Golpe limpio (rendimiento menor)" : "¡PERFECTO! +" + g);
+      chispasGrandes(LIENZO_MARCO_X + pos * ANCHO_MARCO, 176);
+    } else if (d <= anchoGold()) {
+      var g2 = extra ? 2 : 3;
+      calidad = clampAdd(calidad, g2);
+      golpeZona++; forjaBueno++;
+      mensaje = "Buen golpe +" + g2;
+      chispasPeq(LIENZO_MARCO_X + pos * ANCHO_MARCO, 176);
+    } else {
+      var perdida = 2 + golpeMal * 2;               // penaliza progresivamente
+      calidad = clampAdd(calidad, -perdida);
+      golpeMal++; forjaMal++; penalTot += perdida;
+      grietas.push({ x: 310 + Math.random() * 180, y: 250, len: 16 + Math.random() * 18 });
+      mensaje = "¡Fuera de zona! −" + perdida;
+    }
+    avisoTexto = (d <= anchoPerf() ? "¡PERFECTO!" : d <= anchoGold() ? "BIEN" : "MAL") + " " + golpeTot;
+    avisoT = 0.7;
+    sincroniza();
+  }
+
+  function accionTemplar() {
+    if (estado === "fin") return;
+    if (fase === "forja") {
+      if (golpeZona >= 2) {
+        fase = "templado"; tTemp = 0; mensaje = "Al templado: agua cuando el azul llegue al centro"; toast("Al templado");
+      } else {
+        toast("Aún no hay trabajo: " + golpeZona + "/2 golpes útiles"); flash($("bt-templar"));
+        mensaje = "Golpea 2 veces en la zona dorada primero (" + golpeZona + "/2)";
+      }
+    } else if (fase === "pulido") {
+      empujeLima("templar");
+    } else {
+      toast("Ya estás templando"); flash($("bt-templar"));
+    }
+    sincroniza();
+  }
+
+  function accionAgua() {
+    if (estado === "fin") return;
+    if (fasePend) { toast("El agua ya hizo su trabajo…"); return; }
+    if (fase !== "templado") {
+      if (fase === "pulido") { empujeLima("agua"); }
+      else { toast("El agua espera al templado"); flash($("bt-agua")); }
+      return;
+    }
+    var t = posTemplado();
+    var d = Math.abs(t - TPL_C);
+    var txt;
+    if (d <= 0.05) { templPerf++; calidad = clampAdd(calidad, 6); txt = "¡Templado perfecto! +6"; }
+    else if (d <= 0.13) { templBueno++; calidad = clampAdd(calidad, 3); txt = "Buen templado +3"; }
+    else { templLejos++; calidad = clampAdd(calidad, 1); txt = (t < TPL_C ? "Temprano" : "Tarde") + " +1"; }
+    mensaje = txt; avisoTexto = txt; avisoT = 0.9;
+    vaporGrande();
+    toast(txt);
+    // avanza al pulido tras un suspiro breve
+    setTimeoutEntrar("pulido", 0.55);
+  }
+
+  function accionEntregar() {
+    if (estado === "fin") return;
+    if (fase !== "pulido") {
+      if (fase === "forja") toast("El pulido aún no comienza"); 
+      else toast("Primero sumerge la hoja en agua");
+      flash($("bt-entregar")); return;
+    }
+    if (pulPos >= pulSec.length) {
+      cerrarCiclo();
+    } else {
+      toast("Completa el patrón (" + pulPos + "/" + pulSec.length + ")"); flash($("bt-entregar"));
+      mensaje = "Repite el patrón: " + pulSec.join(" ") + "  ·  " + pulPos + "/" + pulSec.length;
+    }
+  }
+
+  function empujeLima(bt) {
+    var sym = SIM[MAPA[bt]];
+    if (sym === pulSec[pulPos]) {
+      pulPos++;
+      chispasPeq(460 + pulPos * 14, 210);
+      mensaje = (pulPos >= pulSec.length) ? "¡Patrón completo! Ahora Entregar" : "Lima buena · " + pulPos + "/" + pulSec.length;
+      if (pulPos >= pulSec.length) { calidad = clampAdd(calidad, 6); }
+    } else {
+      pulErr++; puliErrTot++; penalTot += 1; pulPos = 0;
+      calidad = clampAdd(calidad, -1);
+      grietas.push({ x: 420 + Math.random() * 90, y: 252, len: 12 + Math.random() * 12 });
+      mensaje = "Marca mal grabada · reanuda el patrón (−1)";
+      toast("✗ marca mal grabada"); flash($("bt-" + bt));
+    }
+    sincroniza();
+  }
+
+  /* ------------------------------------------------------------------
+     Avance de fase con retardo corto (feedback sin silencio)
+     ------------------------------------------------------------------ */
+  var fasePend = null, fasePT = 0;
+  function setTimeoutEntrar(nueva, delay) { fasePend = nueva; fasePT = delay; }
+  function resuelvePendiente(dt) {
+    if (fasePend) {
+      fasePT -= dt;
+      if (fasePT <= 0) { fase = fasePend; fasePend = null; inicializaFase(); }
+    }
+  }
+
+  function inicializaFase() {
+    tFase = 0;
+    if (fase === "forja") {
+      golpeZona = 0; golpeMal = 0; golpeTot = 0;
+      mensaje = "Golpea en la zona dorada · necesitas 2";
+    } else if (fase === "templado") {
+      tTemp = 0;
+      mensaje = "Sumerge con Agua cuando el marcador llegue al azul";
+    } else if (fase === "pulido") {
+      var n = 3;
+      pulSec = []; pulPos = 0; pulErr = 0;
+      for (var i = 0; i < n; i++) pulSec.push(SIM[Math.floor(Math.random() * SIM.length)]);
+      mensaje = "Repite: " + pulSec.join(" ") + "  ·  Lima I/II/III";
+    }
+    actualizaBotones();
+  }
+
+  /* ------------------------------------------------------------------
+     Cierre de ciclo → forja siguiente o resultado final
+     ------------------------------------------------------------------ */
+  function cerrarCiclo() {
+    if (ciclo >= CICLO_MAX) { mostrarResultado(); return; }
+    ciclo++;
+    fase = "forja";
+    inicializaFase();
+    toast("Ciclo " + (ciclo - 1) + " completo → ciclo " + ciclo);
+    sincroniza();
+  }
+
+  /* ------------------------------------------------------------------
+     Partículas y efectos
+     ------------------------------------------------------------------ */
+  function chispasGrandes(x, y) {
+    if (reduce || chispas.length > 120) return;
+    for (var i = 0; i < 18; i++) chispas.push({ x, y, vx: (Math.random() - 0.5) * 190, vy: -Math.random() * 200 - 60, r: 2 + Math.random() * 2.4, life: 0.5, max: 0.6, col: [255, 190, 90] });
+  }
+  function chispasPeq(x, y) {
+    if (reduce || chispas.length > 120) return;
+    for (var i = 0; i < 7; i++) chispas.push({ x, y, vx: (Math.random() - 0.5) * 130, vy: -Math.random() * 150 - 40, r: 1.5 + Math.random() * 1.8, life: 0.4, max: 0.5, col: [240, 210, 120] });
+  }
+  function vaporGrande() {
+    if (reduce || vapor.length > 60) return;
+    for (var i = 0; i < 22; i++) vapor.push({ x: 390 + Math.random() * 70, y: 260, vx: (Math.random() - 0.5) * 30, vy: -Math.random() * 60 - 20, r: 6 + Math.random() * 9, life: 1.1, max: 1.1 });
+  }
+
+  function clampAdd(v, d) { return Math.min(100, Math.max(0, v + d)); }
+
+  /* ------------------------------------------------------------------
+     Posición del marcador de templado (ping-pong suave)
+     ------------------------------------------------------------------ */
+  function posTemplado() { return (Math.sin(tTemp / 3.2 * Math.PI * 2) + 1) / 2; }
+
+  /* ------------------------------------------------------------------
+     Sincronización HUD / panel / botones
+     ------------------------------------------------------------------ */
+  function sincroniza() {
+    set("hud-ciclo", ciclo + "/4");
+    set("hud-fase", fase === "forja" ? "Forja" : fase === "templado" ? "Templado" : "Pulido");
+    set("hud-cal", Math.round(calidad));
+    set("hud-letra", letra(calidad));
+    $("fill-cal").style.width = Math.round(calidad) + "%";
+    $("barra-cal").setAttribute("aria-valuenow", String(Math.round(calidad)));
+
+    var obj = $("panel-objetivo");
+    if (fase === "forja") obj.textContent = "◀ golpes útiles " + golpeZona + "/2 · evita golpear fuera";
+    else if (fase === "templado") obj.textContent = "▼ agua cuando el marcador esté en la franja azul";
+    else obj.textContent = "◀▲▼ reproduce el patrón y luego ▶ entregar";
+
+    var molde = $("panel-molde");
+    if (fase === "pulido" && pulSec.length) {
+      molde.innerHTML = pulSec.map(function (s, i) {
+        var cl = "symbol-cell";
+        if (i < pulPos) cl += " ok";
+        if (i === pulPos) cl += " act";
+        return '<span class="' + cl + '">' + s + "</span>";
+      }).join(" ");
+    } else molde.innerHTML = "";
+
+    actualizaBotones();
+    var txt = fase + " · Ciclo " + ciclo + " · " + mensaje;
+    $("linea-fase").textContent = txt;
+    $("linea-fase").setAttribute("aria-label", txt);
+  }
+  function set(id, val) { document.getElementById(id).textContent = val; }
+
+  function actualizaBotones() {
+    var m = $("bt-martillo"), t = $("bt-templar"), a = $("bt-agua"), e = $("bt-entregar");
+    m.querySelector(".bt-label").textContent = fase === "pulido" ? "◇ Lima I" : "Martillo";
+    t.querySelector(".bt-label").textContent = fase === "pulido" ? "✣ Lima II" : "Templar";
+    a.querySelector(".bt-label").textContent = fase === "pulido" ? "≈ Lima III" : "Agua";
+    e.querySelector(".bt-label").textContent = "Entregar";
+    // contexto de tecla espacio
+    e.querySelector(".tecla").textContent = fase === "pulido" ? "◀▲▼" : "␣";
+    m.setAttribute("aria-label", fase === "pulido" ? "Lima de trazo I (diamante)" : "Golpear con martillo");
+    t.setAttribute("aria-label", fase === "pulido" ? "Lima de trazo II (cruz)" : "Templar la hoja");
+    a.setAttribute("aria-label", fase === "pulido" ? "Lima de trazo III (onda)" : "Sumergir en agua");
+    e.setAttribute("aria-label", fase === "pulido" && pulPos < 3 ? "Entregar / confirmar patrón" : "Entregar la hoja");
+  }
+
+  /* ------------------------------------------------------------------
+     Dibujo
+     ------------------------------------------------------------------ */
+  var MARCO_X0 = 60, MARCO_X1 = 580;
+  var ANCHO_MARCO = MARCO_X1 - MARCO_X0;
+  var LIENZO_MARCO_X = MARCO_X0;
+
+  function dibujaFondo(t) {
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#1c1611");
+    grad.addColorStop(0.6, "#241a11");
+    grad.addColorStop(1, "#17110b");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+    // horno a la izquierda, con resplandor oscilante
+    ctx.fillStyle = "#2a1c10"; ctx.fillRect(26, 210, 74, 110);
+    ctx.fillStyle = "#3a2413"; ctx.fillRect(40, 200, 46, 120);
+    var glow = Math.max(0, Math.sin(t * 2.2));       // parpadeo de fuego
+    ctx.fillStyle = "rgba(255,140,50," + (0.35 + glow * 0.35) + ")";
+    ctx.beginPath(); ctx.arc(63, 236, 26 + glow * 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#7a1608"; ctx.fillRect(52, 262, 22, 58);
+    ctx.fillStyle = "#9c2a10"; ctx.beginPath(); ctx.moveTo(52, 262); ctx.lineTo(63, 246); ctx.lineTo(74, 262); ctx.closePath(); ctx.fill();
+
+    // yunque a la derecha-centro
+    ctx.fillStyle = "#3d3226";
+    ctx.fillRect(360, 296, 120, 24);
+    ctx.beginPath(); ctx.moveTo(368, 296); ctx.lineTo(472, 296); ctx.lineTo(452, 270); ctx.lineTo(388, 270); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#57493a"; ctx.beginPath(); ctx.moveTo(378, 268); ctx.lineTo(462, 268); ctx.lineTo(452, 282); ctx.lineTo(388, 282); ctx.closePath(); ctx.fill();
+  }
+
+  function colorHierro(pos) {
+    // cereza → naranja → acero
+    var p = Math.max(0, Math.min(1, pos));
+    var a = [190, 60, 40], b = [255, 130, 50], c = [150, 156, 168];
+    if (p < 0.5) return lerp(a, b, p * 2);
+    return lerp(b, c, (p - 0.5) * 2);
+  }
+  function lerp(a, b, t) { return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)]; }
+
+  function dibujaHoja(faseActual, t) {
+    // silueta horizontal de hoja sobre el yunque
+    var x0 = 330, x1 = 520, y = 268;
+    var col, br;
+    if (faseActual === "templado") { col = [120, 138, 158]; br = 0.3; }
+    else if (faseActual === "pulido") { col = [160, 168, 180]; br = 0.5; }
+    else { col = colorHierro(oroPos()); br = 1; }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x0, y); ctx.lineTo(x1 - 26, y); ctx.lineTo(x1, y - 3); ctx.lineTo(x1 - 10, y + 3); ctx.lineTo(x0, y + 8);
+    ctx.closePath();
+    ctx.fillStyle = "rgb(" + col[0] + "," + col[1] + "," + col[2] + ")";
+    ctx.fill();
+    if (faseActual === "forja" && Math.abs(oroPos() - GOLD_C) <= anchoGold()) {
+      ctx.shadowColor = "rgba(255,140,40,0.9)"; ctx.shadowBlur = 26; ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.strokeStyle = "#0e0a06"; ctx.lineWidth = 2; ctx.stroke();
+
+    // grietas
+    ctx.lineWidth = 2; ctx.strokeStyle = "#241109";
+    for (var i = 0; i < grietas.length; i++) {
+      var g = grietas[i];
+      ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.x + g.len * 0.5, g.y - 6); ctx.lineTo(g.x + g.len, g.y + 4); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+function dibujaMarco(faseActual) {
+    ctx.save();
+    // pista (banda de medición)
+    ctx.fillStyle = "#0d0a07"; ctx.fillRect(MARCO_X0 - 14, 134, ANCHO_MARCO + 28, 60);
+    ctx.strokeStyle = "#3a2c1a"; ctx.lineWidth = 1; ctx.strokeRect(MARCO_X0 - 14, 134, ANCHO_MARCO + 28, 60);
+
+    // zonas por fase
+    var cen = GOLD_C, gold = anchoGold(), perf = anchoPerf();
+    var col = "dorado";
+    if (faseActual === "templado") { cen = TPL_C; gold = 0.13; perf = 0.05; col = "azul"; }
+    if (faseActual === "forja" || faseActual === "templado") {
+      var a = px(cen - gold), b = px(cen + gold);
+      // banda de zona (con rayado heráldico, no solo color)
+      ctx.fillStyle = col === "dorado" ? "rgba(212,164,74,0.22)" : "rgba(90,140,190,0.28)";
+      ctx.fillRect(a, 136, b - a, 46);
+      ctx.strokeStyle = col === "dorado" ? "rgba(190,140,50,0.55)" : "rgba(120,170,220,0.55)";
+      ctx.lineWidth = 2;
+      var k = 0;
+      for (var x = a + 2; x < b - 2; x += 8) {
+        if (k % 2 === 0) { ctx.beginPath(); ctx.moveTo(x, 137); ctx.lineTo(x + 7, 180); ctx.stroke(); }
+        k++;
+      }
+      // subzona perfecta (más estrecha, doble trazo + etiqueta)
+      var pe = px(cen - perf), pe2 = px(cen + perf);
+      ctx.fillStyle = col === "dorado" ? "rgba(230,190,110,0.5)" : "rgba(140,200,255,0.45)";
+      ctx.fillRect(pe, 134, pe2 - pe, 50);
+      ctx.strokeRect(pe, 134, pe2 - pe, 50);
+      // etiquetas: PERFECTA sobre la subzona y nombre de la franja bajo la pista
+      ctx.font = "bold 10px Georgia, serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "#fdf6e3";
+      ctx.fillText(col === "dorado" ? "PERFECTA" : "PERFECTO", (pe + pe2) / 2, 128);
+      ctx.fillText(col === "dorado" ? "◆ dorada ◆" : "▤ azul ideal ▤", (a + b) / 2, 214);
+    }
+
+    // marcador
+    var pos = faseActual === "templado" ? posTemplado() : oroPos();
+    var mx = px(pos);
+    ctx.fillStyle = "#e8dcc0";
+    ctx.beginPath(); ctx.moveTo(mx, 136); ctx.lineTo(mx - 9, 126); ctx.lineTo(mx + 9, 126); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#f5ca6a"; ctx.beginPath(); ctx.arc(mx, 170, 5, 0, Math.PI * 2); ctx.fill();
+    // rieles
+    ctx.strokeStyle = "#6b5636"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(MARCO_X0, 170); ctx.lineTo(MARCO_X1, 170); ctx.stroke();
+
+    // etiquetas de escala (texto, no depende de color)
+    ctx.fillStyle = "#cbb28a"; ctx.font = "9px Georgia, serif";
+    ctx.textAlign = "left"; ctx.fillText("frio", MARCO_X0 - 8, 122);
+    ctx.textAlign = "right"; ctx.fillText("fuego", MARCO_X1 + 8, 122);
+    ctx.restore();
+  }
+
+  function px(p) { return MARCO_X0 + p * ANCHO_MARCO; }
+
+  function dibujaPartículas(dt) {
+    for (var i = chispas.length - 1; i >= 0; i--) {
+      var c = chispas[i]; c.life -= dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 240 * dt;
+      if (c.life <= 0) { chispas.splice(i, 1); continue; }
+      var a = Math.max(0, c.life / c.max);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "rgb(" + c.col.join(",") + ")";
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r * (0.5 + a), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    for (i = vapor.length - 1; i >= 0; i--) {
+      var v = vapor[i]; v.life -= dt; v.y += v.vy * dt; v.x += v.vx * dt; v.r += 4 * dt;
+      if (v.life <= 0) { vapor.splice(i, 1); continue; }
+      var al = Math.max(0, v.life / v.max) * 0.4;
+      ctx.fillStyle = "rgba(210,215,220," + al + ")";
+      ctx.beginPath(); ctx.arc(v.x, v.y, v.r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function dibujaEstados(faseActual, t) {
+    // textos de fase
+    ctx.fillStyle = "#f2e2c2"; ctx.font = "bold 20px Georgia, serif"; ctx.textAlign = "left";
+    ctx.fillText((faseActual === "forja" ? "⚒ FORJA" : faseActual === "templado" ? "💧 TEMPLADO" : "✨ PULIDO") + " · CICLO " + ciclo, 26, 34);
+    ctx.fillStyle = "#cbb28a"; ctx.font = "13px Georgia, serif";
+    ctx.fillText(instruccion(faseActual), 26, 52);
+
+    if (avisoT > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, avisoT);
+      ctx.font = "bold 30px Georgia, serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "#ffdf9a";
+      ctx.fillText(avisoTexto, W / 2, H - 34);
+      ctx.restore();
+    }
+  }
+
+  function instruccion(f) {
+    if (f === "forja") return "golpea ◀ en la franja dorada · útiles " + golpeZona + "/2 · malos " + golpeMal;
+    if (f === "templado") return "▼ agua cuando el marcador cruce la franja azul";
+    return "repite la secuencia: " + pulSec.join(" ") + "  ·  " + pulPos + "/" + pulSec.length;
+  }
+
+  function pintar(dt) {
+    var tt = performance.now() / 1000;
+    ctx.save();
+    ctx.scale(lienzo.width / W, lienzo.height / H);
+
+    dibujaFondo(tt);
+    dibujaHoja(fase, tt);
+    if (fase === "forja" || fase === "templado") dibujaMarco(fase);
+    if (fase === "pulido") dibujaPulido();
+
+    dibujaPartículas(dt);
+    dibujaEstados(fase, tt);
+
+    // viñeta
+    ctx.fillStyle = "rgba(10,6,3,0.16)"; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  function dibujaPulido() {
+    // mesa de trabajo: patrón en tarjetas y brillo
+    ctx.fillStyle = "#fdf3de"; ctx.fillRect(430, 200, 132, 66);
+    ctx.strokeStyle = "#8a6523"; ctx.strokeRect(430, 200, 132, 66);
+    ctx.fillStyle = "#2c2017"; ctx.font = "26px Georgia, serif"; ctx.textAlign = "left";
+    for (var i = 0; i < pulSec.length; i++) {
+      var x = 442 + i * 40;
+      ctx.fillStyle = i < pulPos ? "#a33024" : i === pulPos ? "#bd8f3b" : "#7a5b37";
+      ctx.fillText(pulSec[i], x, 246);
+    }
+    if (pulPos >= pulSec.length) {
+      ctx.save();
+      ctx.strokeStyle = "#3a6b3a"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(580, 322, 18, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#4a6b3a"; ctx.font = "bold 24px Georgia, serif"; ctx.textAlign = "center";
+      ctx.fillText("✓", 580, 330);
+      ctx.restore();
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     Bucle principal
+     ------------------------------------------------------------------ */
+  function bucle(ahora) {
+    if (!rafCorriendo) return;
+    if (pausado) { rafId = requestAnimationFrame(bucle); return; }
+    var dt = nuevoDt(ahora);
+    if (estado === "juego" && fase !== "pulido") {
+      tFase += dt; tBar += dt;
+      if (fase === "templado") tTemp += dt;
+      // vapor ambiental durante el templado
+      if (fase === "templado" && !reduce && vapor.length < 40 && Math.random() < 0.12) {
+        vapor.push({ x: 400 + Math.random() * 50, y: 262, vx: (Math.random() - 0.5) * 26, vy: -Math.random() * 50 - 16, r: 5 + Math.random() * 7, life: 1.0, max: 1.0 });
+      }
+    }
+    resuelvePendiente(dt);
+    if (avisoT > 0) avisoT -= dt;
+    if (estado === "juego") sincroniza();
+    pintar(dt);
+    rafId = requestAnimationFrame(bucle);
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    pausado = document.hidden;
+    if (!pausado) ultimoT = performance.now();
+  });
+
+  /* ------------------------------------------------------------------
+     Inicio / reinicio / resultado
+     ------------------------------------------------------------------ */
+  function reset() {
+    calidad = 0; ciclo = 1; fase = "forja";
+    forjaPerf = forjaBueno = forjaMal = 0;
+    templPerf = templBueno = templLejos = 0;
+    puliErrTot = penalTot = 0;
+    chispas.length = 0; vapor.length = 0; grietas.length = 0;
+    golpeZona = golpeMal = golpeTot = 0;
+    pulSec = []; pulPos = pulErr = 0;
+    fasePend = null; mensaje = ""; avisoT = 0; avisoTexto = "";
+    inicializaFase();
+  }
+
+  function iniciarLoop() {
+    if (rafCorriendo) cancelAnimationFrame(rafId);
+    rafCorriendo = true; ultimoT = performance.now();
+    rafId = requestAnimationFrame(bucle);
+  }
+  function detenerLoop() { rafCorriendo = false; if (rafId) cancelAnimationFrame(rafId); }
+
+  function empezarJuego() {
+    $("mj-titulo").classList.add("is-hidden");
+    $("mj-hud").hidden = false;
+    $("mj-paneles").hidden = false;
+    $("mj-controles").hidden = false;
+    $("mj-fin").hidden = true;
+    estado = "juego";
+    reset();
+    sincroniza();
+    ajustarLienzo();
+    iniciarLoop();
+  }
+
+  function mostrarResultado() {
+    detenerLoop();
+    estado = "fin";
+    var q = Math.round(calidad);
+    var le = letra(calidad);
+    var previo = 0;
+    var key = "minijuegos-medievales.fragua.record";
+    try { previo = parseInt(localStorage.getItem(key) || "0", 10) || 0; } catch (e) {}
+    if (q > previo) { try { localStorage.setItem(key, String(q)); } catch (e) {} }
+
+    $("fin-grado").textContent = le;
+    $("fin-titulo").textContent = "Hoja " + le + (q > previo ? " · ¡nuevo record!" : "");
+    $("fin-fill").style.width = q + "%";
+    $("fin-barra").setAttribute("aria-valuenow", String(q));
+    $("fin-record").textContent = q > previo ? "¡Guardo " + q + " en tu pergamino!"
+      : "Record: " + previo + " (mejor calidad guardada)";
+
+    var des = $("fin-desglose");
+    des.innerHTML = "";
+    [
+      "Forja — perfectos " + forjaPerf + " · buenos " + forjaBueno + " · fallos " + forjaMal,
+      "Templado — perfecto " + templPerf + " · bueno " + templBueno + " · temprano/tarde " + templLejos,
+      "Pulido — marcas mal grabadas " + puliErrTot,
+      "Penalizaciones — " + penalTot
+    ].forEach(function (l) {
+      var d = document.createElement("span");
+      d.innerHTML = "<span>" + l.split("—")[0] + "</span><b>" + (l.split("—")[1] || "") + "</b>";
+      des.appendChild(d);
+    });
+    $("mj-fin").hidden = false;
+    sincroniza();
+  }
+
+  /* ------------------------------------------------------------------
+     Canvas
+     ------------------------------------------------------------------ */
+  function ajustarLienzo() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var r = lienzo.getBoundingClientRect();
+    if (r.width > 0) { lienzo.width = Math.round(r.width * dpr); lienzo.height = Math.round(r.height * dpr); }
+  }
+  window.addEventListener("resize", ajustarLienzo);
+  window.addEventListener("orientationchange", ajustarLienzo);
+
+  /* ------------------------------------------------------------------
+     Eventos: botones + teclado
+     ------------------------------------------------------------------ */
+  $("btn-jugar").addEventListener("click", empezarJuego);
+  $("btn-rejugar").addEventListener("click", empezarJuego);
+  $("bt-martillo").addEventListener("click", function (ev) { flash(ev.currentTarget); accionMartillo(); });
+  $("bt-templar").addEventListener("click", function (ev) { flash(ev.currentTarget); accionTemplar(); });
+  $("bt-agua").addEventListener("click", function (ev) { flash(ev.currentTarget); accionAgua(); });
+  $("bt-entregar").addEventListener("click", function (ev) { flash(ev.currentTarget); accionEntregar(); });
+
+  window.addEventListener("keydown", function (ev) {
+    if (ev.repeat) return;
+    var k = ev.key;
+    if (estado === "titulo") { if (k === "Enter") empezarJuego(); return; }
+    if (estado === "fin") { if (k === "Enter") empezarJuego(); return; }
+    if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(k) >= 0) ev.preventDefault();
+    if (k === " " || k === "ArrowRight") {
+      if (fase === "forja") accionMartillo();
+      else if (fase === "templado") accionAgua();
+      else accionEntregar();
+    } else if (k === "ArrowLeft") accionMartillo();
+    else if (k === "ArrowUp") accionTemplar();
+    else if (k === "ArrowDown") accionAgua();
+  });
+
+  reset();
+  sincroniza();
+})();
+</script>
+
+</body>
+</html>

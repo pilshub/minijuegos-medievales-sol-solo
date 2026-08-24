@@ -1,0 +1,13 @@
+{
+  "name": "minijuegos-medievales-nuevo",
+  "pages": ["castillo.html", "fragua.html", "heraldo.html"],
+  "http_port": 8644,
+  "viewport": {"width": 390, "height": 844},
+  "mobile": true,
+  "checks": ["syntax", "http", "browser", "play"],
+  "interactions": {
+    "castillo.html": {"start": "#btn-jugar", "oleada": "#bt-oleada", "flechas": "#bt-flechas", "reparar": "#bt-reparar"},
+    "fragua.html": {"start": "#btn-jugar", "martillo": "#bt-martillo", "templar": "#bt-templar", "entregar": "#bt-entregar"},
+    "heraldo.html": {"start": "#btn-jugar", "derecha": "#bt-der", "salto": "#bt-saltar", "interact": "#bt-interact"}
+  }
+}

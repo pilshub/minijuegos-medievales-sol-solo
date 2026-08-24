@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>El Mensajero del Rey · Minijuegos Medievales</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="juego heraldo">
+
+<div class="marco">
+
+  <a class="volver" href="index.html">Menú</a>
+  <h1 class="titulo-juego">El Mensajero del Rey</h1>
+
+  <!-- Pantalla de título / narrativa breve (convenio del verificador) -->
+  <div class="overlay" id="mj-titulo">
+    <section class="panel-titulo">
+      <div class="reino">Encargo de Sol</div>
+      <div class="crest" role="img" aria-label="Escudo"></div>
+      <h2>El Mensajero del Rey</h2>
+      <div class="mecanica-texto">
+        <p>Llevas el <strong>pergamino sellado del rey</strong> a la aldea aislada, tras el bosque.
+        Cabalga el camino real esquivando rocas, acequias y el río; después, abre la puerta del
+        bosque repitiendo el orden secreto de púas y puñales.</p>
+        <ul>
+          <li><span aria-hidden="true">←→</span> Cambia de carril · <span aria-hidden="true">␣</span> salta.</li>
+          <li><span aria-hidden="true">E</span> Activa las señales de atajo cuando brillen.</li>
+          <li><span aria-hidden="true">✦</span> En el bosque: ◀ púa · ▶ puñal · ␣ repetir · E confirmar.</li>
+        </ul>
+        <p class="nota">El pergamino resiste 3 golpes; cada caída lo marca. Llegar entero y rápido vale puntos.</p>
+      </div>
+      <button class="btn btn-jugar" id="btn-jugar" aria-label="Montar a caballo y partir">JUGAR</button>
+      <p class="muted">Tu mejor puntuación y tu mejor tiempo se guardan en este dispositivo.</p>
+    </section>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud" id="mj-hud" hidden>
+    <span class="chip">🛣 <span class="etq">Avance</span> <span class="val" id="hud-dist">0m</span></span>
+    <span class="chip">⏱ <span class="etq">Tiempo</span> <span class="val" id="hud-tiempo">0.0s</span></span>
+    <span class="chip">✉ <span class="etq">Pergamino</span> <span class="val" id="hud-perg"></span></span>
+    <span class="chip">🏁 <span class="etq">Meta</span> <span class="val" id="hud-meta">900m</span></span>
+  </div>
+
+  <!-- Escenario -->
+  <div class="escenario">
+    <canvas id="lienzo" width="640" height="360" aria-label="El camino real al atardecer, la silueta del mensajero a caballo"></canvas>
+    <div class="manto" aria-hidden="true"></div>
+  </div>
+  <p class="nota-canvas" id="linea-fase" role="status" aria-live="polite">Camino Real · cabalga, esquivando</p>
+
+  <!-- Paneles: puzle de memoria del bosque -->
+  <div class="paneles" id="mj-paneles" hidden>
+    <section class="panel" id="panel-puzle">
+      <h4>La puerta del bosque</h4>
+      <div class="simbolo-row" id="puzle-row" aria-label="Secuencia de púas y puñales"></div>
+      <p class="puzle-estado" id="puzle-estado">—</p>
+      <p class="tenue" id="puzle-ayuda">Replica con ◀ = Púa ▲ · ▶ = Puñal ✦</p>
+    </section>
+  </div>
+
+  <!-- Controles táctiles -->
+  <div class="controles" id="mj-controles" hidden>
+    <button class="tbtn" id="bt-izq" aria-label="Cambiar a la izquierda"><span class="bt-label">Izq</span><span class="tecla">◀</span></button>
+    <button class="tbtn" id="bt-saltar" aria-label="Saltar"><span class="bt-label">Saltar</span><span class="tecla">␣</span></button>
+    <button class="tbtn" id="bt-der" aria-label="Cambiar a la derecha"><span class="bt-label">Der</span><span class="tecla">▶</span></button>
+    <button class="tbtn tbtn--tierra" id="bt-interact" aria-label="Activar señal / interactuar"><span class="bt-label">Interact</span><span class="tecla">E</span></button>
+  </div>
+
+</div>
+
+<!-- Pantalla final -->
+<div class="overlay" id="mj-fin" hidden>
+  <section class="panel-titulo panel--victoria">
+    <div class="reino">Encargo de Sol</div>
+    <div class="crest" role="img" aria-label="Escudo"></div>
+    <h2 id="fin-titulo">Mensaje entregado</h2>
+    <p id="fin-sub" class="muted">La aldea despierta junto al fuego cálido.</p>
+    <div class="desglose" id="fin-desglose"></div>
+    <p class="record" id="fin-record"></p>
+    <button class="btn btn--oro btn-rejugar" id="btn-rejugar" aria-label="Volver a cabalgar">Rejugar</button>
+  </section>
+</div>
+
+<script>
+/* ====================================================================
+   EL MENSAJERO DEL REY — carrera de carriles + puzle de memoria.
+   Flujo: título → Camino Real (3 carriles, obstáculos, atajos, río)
+   → Bosque (secuencia de púas y puñales) → resultado.
+   Un rAF único con dt acotado, pausa por visibilitychange, canvas DPR,
+   timers centralizados (sin fugas al reiniciar). Sin red ni dependencias.
+   IDs obligatorios respetados, botones jamás disabled.
+   ==================================================================== */
+(function () {
+  "use strict";
+
+  var $ = document.getElementById.bind(document);
+  var lienzo = $("lienzo");
+  var ctx = lienzo.getContext("2d");
+  var reduce = (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  // ---------- geometría ----------
+  var W = 640, H = 360, HORIZONTE = 150;
+  var LANES = 3, LANE_X = [150, 310, 470];
+  var PXM = 2.6;                 // px por metro (conversión mundo→pantalla)
+
+  function laneY(l) { return HORIZONTE + 22 + l * 38; }   // base del carril (y de la tierra)
+
+  // ---------- progreso (metros) ----------
+  var META = 900;
+  var VEL = [ { hasta: 300, v: 12 }, { hasta: 600, v: 16 }, { hasta: 1e9, v: 21 } ];
+  var CHOCA = 12;                 // metros del "cuerpo a cuerpo" de colisión
+  var SALTO_STD = 0.65;           // segundos que dura el salto
+
+  // ---------- puzle ----------
+  var SIM = ["▲", "✦"];           // PÚA y PUÑAL
+  var NOMBRE = { "▲": "púa", "✦": "puñal" };
+  var LONG_SEC = 4, INTENTOS_MAX = 3;
+
+  // ---------- estado ----------
+  var fase = "titulo";            // titulo | camino | bosque | fin
+  var estado = "run";             // run | llegar (solo camino)
+  var carril = 1;
+  var dist = 0, velCur = 12, tiempoJuego = 0;
+  var perg = 3, vidas = 3, choques = 0, bono = 0;
+  var saltoT = 0, saltando = false, invulnT = 0;
+
+  var obsts = [], senales = [], part = [];
+
+  var sec = [], posEnt = 0, intento = 1, viendoSec = false, pistaDada = false, exito = false;
+  var expoT = 0, expoI = 0;
+
+  var rafId = 0, rafCorriendo = false, pausado = false, ultimoT = 0;
+  var timers = {};
+
+  // ------------------------------------------------------------------ utilidades
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function r(x) { return Math.round(x); }
+  function soon(llave, fn, ms) {
+    if (timers[llave]) clearTimeout(timers[llave]);
+    timers[llave] = setTimeout(function () { delete timers[llave]; fn(); }, ms);
+  }
+  function limpiaTimers() { Object.keys(timers).forEach(function (k) { clearTimeout(timers[k]); delete timers[k]; }); }
+  function nuevoDt(now) { var dt = (now - ultimoT) / 1000; ultimoT = now; return Math.min(dt, 0.05); }
+
+  var toastEl = null;
+  function toast(txt, ms) {
+    if (toastEl) toastEl.remove();
+    toastEl = document.createElement("div");
+    toastEl.className = "aviso";
+    toastEl.textContent = txt;
+    document.body.appendChild(toastEl);
+    soon("toast", function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, ms || 1700);
+  }
+  function flash(b) { b.classList.remove("is-flash"); void b.offsetWidth; b.classList.add("is-flash"); }
+
+  // ------------------------------------------------------------------ HUD y botones
+  function set(id, v) { document.getElementById(id).textContent = v; }
+  function sincHUD() {
+    set("hud-dist", Math.min(META, r(dist)) + "m");
+    set("hud-tiempo", tiempoJuego.toFixed(1) + "s");
+    set("hud-perg", "●".repeat(Math.max(0, perg)) + "○".repeat(Math.max(0, 3 - perg)));
+    set("hud-meta", META + "m");
+    var linea = $("linea-fase");
+    if (fase === "camino") {
+      linea.textContent = estado === "run"
+        ? "⚑ Camino Real · " + r(dist) + "/" + META + "m · carril " + (carril + 1)
+        : "…llegas al borde del bosque…";
+    } else if (fase === "bosque") {
+      linea.textContent = "✦ Bosque · intento " + intento + "/" + INTENTOS_MAX + " · replica " + posEnt + "/" + sec.length;
+    } else linea.textContent = "—";
+  }
+
+  function botones() {
+    var izq = $("bt-izq"), der = $("bt-der"), sal = $("bt-saltar"), inter = $("bt-interact");
+    if (fase === "camino" || fase === "bosque") {
+      izq.hidden = der.hidden = sal.hidden = inter.hidden = false;
+      if (fase === "camino") {
+        izq.querySelector(".bt-label").textContent = "Izq";  izq.setAttribute("aria-label", "Cambiar de carril a la izquierda");
+        der.querySelector(".bt-label").textContent = "Der";  der.setAttribute("aria-label", "Cambiar de carril a la derecha");
+        sal.querySelector(".bt-label").textContent = "Saltar"; sal.setAttribute("aria-label", "Saltar el obstáculo");
+        inter.querySelector(".bt-label").textContent = "Entrega"; inter.setAttribute("aria-label", "Leer y activar las señales de atajo");
+      } else {
+        izq.querySelector(".bt-label").textContent = "Púa";  izq.setAttribute("aria-label", "Introducir símbolo púa ▲");
+        der.querySelector(".bt-label").textContent = "Puñal"; der.setAttribute("aria-label", "Introducir símbolo puñal ✦");
+        sal.querySelector(".bt-label").textContent = "Pista"; sal.setAttribute("aria-label", "Repetir la exhibición de la secuencia");
+        inter.querySelector(".bt-label").textContent = "Confirmar"; inter.setAttribute("aria-label", "Confirmar la secuencia / interactuar con la puerta");
+      }
+    } else {
+      izq.hidden = der.hidden = sal.hidden = inter.hidden = true;
+    }
+  }
+
+  // ------------------------------------------------------------------ CAMINO: generación segura
+  function imposible(d, l) {
+    for (var i = 0; i < obsts.length; i++) {
+      if (obsts[i].carril === l && obsts[i].tipo !== "atajo" && Math.abs(obsts[i].d - d) < 55) return true;
+    }
+    return false;
+  }
+  function generarCamino() {
+    obsts.length = 0;
+    // arranque tranquilo: tramo sin obstáculos
+    var d = 70, segura = 0;
+    while (d < META - 130) {
+      var l = Math.floor(Math.random() * LANES);
+      var tipo = Math.random() < 0.5 ? "roca" : "acequia";
+      if (Math.random() < 0.16 && segura > 0) tipo = "atajo";
+      if (!imposible(d, l)) {
+        obsts.push({ tipo: tipo, carril: l, d: d, cleared: false });
+        if (tipo === "atajo") segura = 0; else segura++;
+      }
+      d += 42 + Math.random() * 62;
+    }
+    // set-pieces:
+    obsts.push({ tipo: "atajo", carril: 2, d: 150, fija: true });   // señal cercana
+    obsts.push({ tipo: "atajo", carril: 0, d: 420, fija: true });
+    obsts.push({ tipo: "rio", carril: -1, d: META - 90, fija: true }); // el río
+    // quitar atajos que rompan la "no colision" del arranque
+    obsts.sort(function (a, b) { return a.d - b.d; });
+    // señales autónomas (no colisionan, solo se activan)
+    senales.length = 0;
+    for (var i = 0; i < obsts.length; i++) {
+      if (obsts[i].tipo === "atajo") senales.push({ carril: obsts[i].carril, d: obsts[i].d, activado: false });
+    }
+  }
+  function obst(tipo, l, d) { return { tipo: tipo, carril: l, d: d, cleared: false }; }
+
+  // ------------------------------------------------------------------ CAMINO: acciones
+  function accionIzq() {
+    if (fase === "fin") return;              // ya terminó: sin avisos engañosos
+    if (fase === "bosque") { entrada(0); return; }
+    if (fase !== "camino") { toast("Aún viajas…"); return; }
+    if (estado !== "run") { toast("Ya no estás en el camino"); return; }
+    if (carril > 0 && !saltando) { carril--; polvo(); }
+    sincHUD();
+  }
+  function accionDer() {
+    if (fase === "fin") return;              // ya terminó: sin avisos engañosos
+    if (fase === "bosque") { entrada(1); return; }
+    if (fase !== "camino") { toast("Aún viajas…"); return; }
+    if (estado !== "run") { toast("Ya no estás en el camino"); return; }
+    if (carril < LANES - 1 && !saltando) { carril++; polvo(); }
+    sincHUD();
+  }
+  function accionSaltar() {
+    if (fase === "fin") return;
+    if (fase === "camino") {
+      if (estado !== "run") { toast("El bosque te espera"); return; }
+      if (!saltando) { saltando = true; saltoT = 0; }
+      return;
+    }
+    if (fase === "bosque") { mostrarSecuencia(); return; }
+    toast("Aún viajas…");
+  }
+  function accionInteract() {
+    if (fase === "fin") return;
+    if (fase === "camino") {
+      if (estado !== "run") { toast("El camino ha quedado atrás"); return; }
+      activarSenal();
+      return;
+    }
+    if (fase === "bosque") {
+      if (viendoSec) { mostrarSecuencia(); return; }
+      if (posEnt < sec.length) { toast("Completa la réplica primero"); flash($("bt-interact")); return; }
+      confirmarSecuencia();
+      return;
+    }
+    toast("Aún viajas…");
+  }
+
+  function activarSenal() {
+    var mejor = null, md = 1e9;
+    for (var i = 0; i < senales.length; i++) {
+      var s = senales[i];
+      if (s.activado) continue;
+      var dd = Math.abs(s.d - dist);
+      if (s.carril === carril && dd < 60 && dd < md) { md = dd; mejor = s; }
+    }
+    if (mejor) {
+      mejor.activado = true; bono += 40;
+      toast("⚑ Atajo tomado · +40");
+      part.push({ x: LANE_X[carril], y: laneY(carril) - 10, c: "#dab45e", r: 6, t: 0 });
+    } else { toast("Ninguna señal en este tramo"); flash($("bt-interact")); }
+    sincHUD();
+  }
+
+  // ------------------------------------------------------------------ CAMINO: simulación
+  function viaja(dt) {
+    if (estado !== "run") return;
+    velCur = 12;
+    for (var t = 0; t < VEL.length; t++) { if (dist < VEL[t].hasta) { velCur = VEL[t].v; break; } }
+    dist += velCur * dt;
+    tiempoJuego += dt;
+
+    if (saltando) { saltoT += dt; if (saltoT >= SALTO_STD) saltando = false; }
+    if (invulnT > 0) invulnT -= dt;
+
+    for (var i = obsts.length - 1; i >= 0; i--) {
+      var o = obsts[i];
+      if (o.d < dist - 80) obsts[i].pasado = true;   // sigo marcando para reciclaje visual
+      if (o.tipo === "atajo") continue;              // no colisionan
+
+      var mismo = (o.carril === -1) ? true : (o.carril === carril);
+      if (mismo) {
+        var cerca = Math.abs(o.d - dist) < CHOCA;
+        if (cerca && saltando && !o.cleared) o.cleared = true;
+        else if (cerca && !o.cleared && invulnT <= 0) { o.cleared = true; chocar(o); }
+      }
+    }
+    if (dist >= META) llegarAlBosque();
+  }
+
+  function chocar(o) {
+    if (o.tipo === "roca") perg--;
+    else if (o.tipo === "acequia") { perg--; vidas--; }
+    else if (o.tipo === "rio") { vidas -= 2; perg--; }   // el río también arriesga el pergamino
+    perg = Math.max(0, perg);                            // nunca bajo cero
+    choques++; invulnT = 1.2;
+    toast(o.tipo === "rio" ? "¡El río te arrastra!" : (o.tipo === "roca" ? "¡Roca!" : "¡Acequia!"), 1400);
+    chispas();
+    sincHUD();
+    if (perg <= 0 || vidas <= 0) derrota();
+  }
+
+  function llegarAlBosque() {
+    estado = "llegar";
+    obsts.length = 0; senales.length = 0;
+    toast("Llegas al borde del bosque");
+    sincHUD();
+    soon("bosque", function () {
+      fase = "bosque"; estado = "run";
+      arrancarPuzle();
+      botones();
+      sincHUD();
+    }, 900);
+  }
+
+  // ------------------------------------------------------------------ BOSQUE: puzle
+  function arrancarPuzle() {
+    sec.length = 0;
+    for (var i = 0; i < LONG_SEC; i++) sec.push(SIM[Math.floor(Math.random() * 2)]);
+    posEnt = 0; intento = 1; pistaDada = false; exito = false;
+    pintarPanel("idle");
+    sincHUD();
+    soon("expoIni", function () { mostrarSecuencia(); }, 650);
+  }
+
+  function mostrarSecuencia() {
+    if (viendoSec) return;
+    viendoSec = true; expoT = 0; expoI = 0;
+    pintarPanel("expo");
+    void 0;
+  }
+  function pasoExpo(dt) {
+    if (!viendoSec) return;
+    expoT -= dt;
+    if (expoT <= 0) {
+      expoT = 0.65;
+      if (expoI >= sec.length) { viendoSec = false; expoI = 0; pintarPanel("input"); return; }
+      pintarPanel("expo");
+      expoI++;
+    }
+  }
+
+  function pintarPanel(modo) {
+    var row = $("puzle-row");
+    row.innerHTML = "";
+    for (var i = 0; i < sec.length; i++) {
+      var sp = document.createElement("span");
+      var cl = "symbol-cell";
+      if (modo === "expo" && i === expoI) cl += " act";
+      if (modo === "input") { if (i < posEnt) cl += " ok"; else if (i === posEnt) cl += " act"; }
+      sp.className = cl;
+      sp.textContent = sec[i];
+      row.appendChild(sp);
+    }
+    var st = $("puzle-estado");
+    if (modo === "expo") st.textContent = "Observa la secuencia…";
+    else if (modo === "input") st.textContent = "Tu turno · intento " + intento + "/" + INTENTOS_MAX;
+    else st.textContent = "La puerta espera tu replica";
+  }
+
+  function entrada(idx) {
+    if (fase !== "bosque" || viendoSec) { toast("Primero observa la secuencia"); return; }
+    var sym = SIM[idx];
+    if (sym === sec[posEnt]) {
+      posEnt++;
+      toast("✓ " + posEnt + "/" + sec.length);
+      if (posEnt >= sec.length) { exito = true; toast("¡La puerta se abre!"); exitoApertura(); return; }
+      pintarPanel("input");
+    } else {
+      toast("✗ No era ese símbolo");
+      errarPuzle();
+    }
+    sincHUD();
+  }
+
+  function errarPuzle() {
+    if (intento < INTENTOS_MAX) {
+      intento++; posEnt = 0;
+      pintarPanel("input");
+      soon("expo2", function () { mostrarSecuencia(); }, 700);
+    } else {
+      posEnt = 0; pistaDada = true;
+      toast("La puerta te muestra una pista");
+      pintarPanel("idle");
+      $("puzle-estado").textContent = "La luna ilumina: " + sec.map(function (s, i) {
+        return (i % 2 === 0) ? NOMBRE[s] : "·";
+      }).join("   ");
+    }
+    sincHUD();
+  }
+
+  function confirmarSecuencia() {
+    if (posEnt < sec.length) { toast("Completa la réplica"); flash($("bt-interact")); return; }
+    exito = true; toast("¡La puerta se abre!"); exitoApertura();
+  }
+
+  function exitoApertura() {
+    fase = "fin"; estado = "run";
+    botones();
+    mostrarResultado();
+  }
+
+  // ------------------------------------------------------------------ RESULTADO
+  function calcularPuntos() {
+    var rapidez = Math.max(0, 900 - Math.round(tiempoJuego)) * 1.5;   // a menor tiempo, más
+    return r(perg * 320 + bono * 1 + rapidez + (choques === 0 ? 120 : 0) + (exito ? 200 : 0));
+  }
+  function calidadEntrega() {
+    if (intento <= 1 && !pistaDada) return "Buena";
+    if (intento <= 2) return "Media";
+    return "Minima";
+  }
+
+  function mostrarResultado() {
+    var puntos = calcularPuntos();
+    var clave = "minijuegos-medievales.heraldo.record";
+    var mejorP = 0, mejorT = 1e18;
+    try { var reg = JSON.parse(localStorage.getItem(clave) || "{}"); mejorP = reg.mejorPuntos || 0; mejorT = reg.mejorTiempo || 1e18; } catch (e) {}
+    var nuevo = puntos > mejorP;
+    var nuevoT = Math.round(tiempoJuego * 100) / 100 < mejorT;
+    if (nuevo || nuevoT) {
+      try { localStorage.setItem(clave, JSON.stringify({
+        mejorPuntos: Math.max(mejorP, puntos),
+        mejorTiempo: Math.min(mejorT, Math.round(tiempoJuego * 100) / 100)
+      })); } catch (e) {}
+    }
+
+    $("fin-titulo").textContent = "Mensaje entregado";
+    $("fin-sub").textContent = "Entrega: " + calidadEntrega() + " · la aldea te aclama";
+
+    // aspecto del panel final: victoria = dorado, derrota = lacre/rojo
+    var panel = $("mj-fin").querySelector(".panel-titulo");
+    panel.classList.add("panel--victoria");
+    panel.classList.remove("panel--derrota");
+    $("fin-record").textContent = (nuevo ? "¡Nuevo puntaje: " + puntos + "!" : "Puntos: " + puntos + " · record: " + mejorP) +
+      "  ·  tiempo " + tiempoJuego.toFixed(1) + "s";
+
+    var g = $("fin-desglose");
+    g.innerHTML = "";
+    [
+      ["Puntuación", puntos],
+      ["Pergamino", "●".repeat(perg) + "○".repeat(3 - perg) + " (" + perg + "/3)"],
+      ["Tiempo", tiempoJuego.toFixed(1) + "s"],
+      ["Atajos", bono],
+      ["Entrega", calidadEntrega()]
+    ].forEach(function (c) {
+      var d = document.createElement("span");
+      d.innerHTML = "<span>" + c[0] + "</span><b>" + c[1] + "</b>";
+      g.appendChild(d);
+    });
+    $("mj-fin").hidden = false;
+    sincHUD();
+  }
+
+  function derrota() {
+    fase = "fin"; estado = "run";
+    botones();
+    // aspecto del panel final: derrota = lacre/rojo
+    var panel = $("mj-fin").querySelector(".panel-titulo");
+    panel.classList.add("panel--derrota");
+    panel.classList.remove("panel--victoria");
+    $("fin-titulo").textContent = "El mensaje se perdió";
+    $("fin-sub").textContent = "El pergamino sellado se hundió en el río o se rasgó de pura astilla.";
+    $("fin-record").textContent = "";
+    var g = $("fin-desglose");
+    g.innerHTML = "";
+    [["Resultado", "derrota · avance " + r(dist) + "m"]].forEach(function (c) {
+      var d = document.createElement("span");
+      d.innerHTML = "<span>" + c[0] + "</span><b>" + c[1] + "</b>"; g.appendChild(d);
+    });
+    $("mj-fin").hidden = false;
+  }
+
+  // ------------------------------------------------------------------ DIBUJO
+  function dibujaCamino() {
+    // cielo atardecer editorial en capas
+    var c1 = "#3d4b6b", c2 = "#c96f3e", c3 = "#e8a85e";
+    var grad = ctx.createLinearGradient(0, 0, 0, HORIZONTE);
+    grad.addColorStop(0, c1); grad.addColorStop(0.6, c2); grad.addColorStop(1, c3);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    // sol
+    ctx.beginPath(); ctx.arc(W - 90, 78, 30, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,224,150,0.95)"; ctx.fill();
+    // colinas
+    ctx.fillStyle = "rgba(40,26,20,0.6)";
+    ctx.beginPath(); ctx.moveTo(0, HORIZONTE);
+    ctx.quadraticCurveTo(W * 0.25, HORIZONTE - 40, W * 0.5, HORIZONTE - 16);
+    ctx.lineTo(W, HORIZONTE); ctx.closePath(); ctx.fill();
+    ctx.fillRect(0, HORIZONTE, W, 4);
+    // árboles lejanos
+    ctx.fillStyle = "rgba(30,22,16,0.55)";
+    for (var i = 0; i < 9; i++) {
+      var tx = (i * 83 + 23) % W, th = 26 + (i % 3) * 7;
+      ctx.fillRect(tx, HORIZONTE - th, 3, th + 5);
+    }
+    // camino: tierra y líneas de carril
+    var hT = H - HORIZONTE;
+    ctx.fillStyle = "#c99863"; ctx.fillRect(0, HORIZONTE, W, hT);
+    ctx.fillStyle = "#b5844f"; ctx.fillRect(0, HORIZONTE + 10, W, 4); ctx.fillRect(0, H - 14, W, 4);
+    ctx.strokeStyle = "rgba(80,55,30,0.45)"; ctx.lineWidth = 3;
+    for (var l = 1; l < LANES; l++) {
+      ctx.setLineDash([24, 20]);
+      ctx.beginPath(); ctx.moveTo(laneX_p(l) - 70, HORIZONTE); ctx.lineTo(laneX_p(l) - 50, H);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // obstáculos (x en px desde mundo)
+    for (var k = 0; k < obsts.length; k++) {
+      var o = obsts[k];
+      var ox = W / 2 + (o.d - dist) * PXM;
+      if (ox < -70 || ox > W + 70) continue;
+      var oy = laneY(o.carril === -1 ? 1 : o.carril);
+      if (o.cleared && o.tipo !== "rio") {
+        // cruz de superado
+        ctx.strokeStyle = "rgba(30,20,10,0.5)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(ox - 7, oy - 16); ctx.lineTo(ox + 7, oy - 4); ctx.moveTo(ox + 7, oy - 16); ctx.lineTo(ox - 7, oy - 4); ctx.stroke();
+        continue;
+      }
+      switch (o.tipo) {
+        case "roca":
+          ctx.fillStyle = "#4c3a2a"; ctx.beginPath(); ctx.arc(ox, oy - 6, 13, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#5d4a36"; ctx.beginPath(); ctx.arc(ox - 5, oy - 11, 6, 0, Math.PI * 2); ctx.fill();
+          break;
+        case "acequia":
+          ctx.fillStyle = "#2b3a4a"; ctx.fillRect(ox - 16, oy - 10, 32, 14);
+          ctx.strokeStyle = "rgba(255,224,150,0.5)"; ctx.lineWidth = 2; ctx.strokeRect(ox - 16, oy - 10, 32, 14);
+          break;
+        case "atajo":
+          ctx.fillStyle = "#5a7640"; ctx.fillRect(ox - 18, oy - 20, 36, 28);
+          ctx.fillStyle = "#f3e6cf"; ctx.font = "bold 20px Georgia"; ctx.textAlign = "center";
+          ctx.fillText("⚑", ox, oy);
+          break;
+        case "rio":
+          ctx.fillStyle = "#274050"; ctx.fillRect(0, oy - 22, W, 46);
+          ctx.fillStyle = "rgba(220,230,235,0.3)";
+          for (var w = 0; w < 16; w++) ctx.fillRect(w * 46 + 4, oy - 14 + (w % 3) * 7, 18, 3);
+          break;
+      }
+    }
+
+    // señales de atajo (banderas)
+    for (var s = 0; s < senales.length; s++) {
+      var sn = senales[s];
+      var sx = LANE_X[sn.carril], sy = HORIZONTE + 6;
+      ctx.save();
+      ctx.globalAlpha = sn.activado ? 0.35 : 1;
+      ctx.strokeStyle = "#3a2c1a"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx, sy + 12); ctx.lineTo(sx, sy - 10); ctx.stroke();
+      ctx.fillStyle = sn.activado ? "#8a8a5a" : "#a33024";
+      ctx.fillRect(sx, sy - 10, 18, 10);
+      ctx.fillStyle = "#f3e6cf"; ctx.font = "8px Georgia"; ctx.textAlign = "center"; ctx.fillText("⚑", sx + 9, sy - 2);
+      ctx.restore();
+    }
+
+    // el mensajero
+    var mxx = LANE_X[carril];
+    var baseY = laneY(carril) - 18;
+    var myy = saltando ? baseY - Math.sin(Math.min(saltoT / SALTO_STD, 1) * Math.PI) * 34 : baseY;
+    ctx.save();
+    if (invulnT > 0 && Math.floor(invulnT * 10) % 2 === 0) ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#3a2c1a"; ctx.fillRect(mxx - 24, myy - 14, 50, 13);
+    ctx.beginPath(); ctx.arc(mxx - 18, myy - 11, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#241f1a"; ctx.fillRect(mxx - 8, myy - 32, 14, 20);
+    ctx.beginPath(); ctx.arc(mxx - 1, myy - 36, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // aviso del río
+    for (var q = 0; q < obsts.length; q++) {
+      if (obsts[q].tipo === "rio" && Math.abs(obsts[q].d - dist) < 200) {
+        ctx.fillStyle = "rgba(30,16,10,0.75)"; ctx.font = "bold 16px Georgia"; ctx.textAlign = "left";
+        ctx.fillText("¡SALTA EL RÍO!", 16, 36);
+        break;
+      }
+    }
+  }
+
+  function laneX_p(l) { return LANE_X[l]; } // compat para líneas de carril
+
+  function dibujaBosque() {
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#3d2f44"); grad.addColorStop(0.5, "#2a2430"); grad.addColorStop(1, "#1c1a20");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    for (var i = 0; i < 26; i++) {
+      var x = (i * 79 + 17) % W, th = 56 + (i % 6) * 18;
+      ctx.fillStyle = "#0f1a10"; ctx.fillRect(x, H - th, 4, th);
+      ctx.fillStyle = "#0c1a0e"; ctx.beginPath(); ctx.arc(x + 2, H - th - 10, 15 + (i % 3) * 4, 0, Math.PI * 2); ctx.fill();
+    }
+    // puerta de la aldea
+    ctx.fillStyle = "#4a3020"; ctx.fillRect(W / 2 - 32, H - 146, 64, 146);
+    ctx.fillStyle = "#5a3c28"; ctx.fillRect(W / 2 - 44, H - 158, 88, 20);
+    ctx.fillStyle = "#241a10"; ctx.fillRect(W / 2 - 22, H - 104, 44, 104);
+    // antorchas cálidas
+    ctx.fillStyle = "#e8a85e";
+    ctx.beginPath(); ctx.arc(W / 2 - 88, H - 150, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2 + 88, H - 150, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.font = "bold 20px Georgia"; ctx.textAlign = "center"; ctx.fillStyle = "#f3e6cf";
+    ctx.fillText("puerta del bosque", W / 2, 34);
+  }
+
+  function dibujaPart(dt) {
+    for (var i = part.length - 1; i >= 0; i--) {
+      var p = part[i]; p.t += dt; p.x += 10 * dt; p.y -= 22 * dt;
+      ctx.globalAlpha = Math.max(0, 1 - p.t * 2.2);
+      ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.5, p.r - p.t * 6), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  function polvo() { part.push({ x: LANE_X[carril], y: laneY(carril), c: "#b98a54", r: 6, t: 0 }); }
+  function chispas() { for (var i = 0; i < 9; i++) part.push({ x: LANE_X[carril], y: laneY(carril) - 16, c: "#dab45e", r: 7, t: 0 }); }
+
+  // ------------------------------------------------------------------ BUCLE
+  function bucle(now) {
+    if (!rafCorriendo) return;
+    if (pausado) { rafId = requestAnimationFrame(bucle); return; }
+    var dt = nuevoDt(now);
+    if (fase === "camino" && estado === "run") { viaja(dt); sincHUD(); }
+    if (fase === "bosque" && viendoSec) pasoExpo(dt);
+    pintar(dt);
+    rafId = requestAnimationFrame(bucle);
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    pausado = document.hidden;
+    if (!pausado) ultimoT = performance.now();
+  });
+
+  function pintar(dt) {
+    ctx.save();
+    ctx.scale(lienzo.width / W, lienzo.height / H);
+    if (fase === "camino") dibujaCamino();
+    else dibujaBosque();
+    dibujaPart(dt);
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------------ INICIO / RESET
+  function reset(arrancar) {
+    fase = arrancar ? "camino" : "titulo"; estado = "run";
+    carril = 1; dist = 0; velCur = 12; tiempoJuego = 0;
+    perg = 3; vidas = 3; choques = 0; bono = 0;
+    saltando = false; saltoT = 0; invulnT = 0;
+    sec.length = 0; posEnt = 0; intento = 1; viendoSec = false; pistaDada = false; exito = false;
+    expoT = 0; expoI = 0;
+    part.length = 0;
+    generarCamino();
+    botones();
+    sincHUD();
+  }
+
+  function empezarJuego() {
+    limpiaTimers();
+    $("mj-titulo").classList.add("is-hidden");
+    $("mj-hud").hidden = false;
+    $("mj-paneles").hidden = false;
+    $("mj-controles").hidden = false;
+    $("mj-fin").hidden = true;
+    reset(true);
+    ajustarLienzo();
+    iniciarLoop();
+  }
+
+  function reiniciar() {
+    limpiaTimers();
+    $("mj-fin").hidden = true;
+    $("mj-titulo").classList.add("is-hidden");
+    $("mj-hud").hidden = false;
+    $("mj-paneles").hidden = false;
+    $("mj-controles").hidden = false;
+    reset(true);
+    ajustarLienzo();
+    iniciarLoop();
+  }
+
+  function iniciarLoop() {
+    if (rafCorriendo && rafId) cancelAnimationFrame(rafId);
+    rafCorriendo = true; ultimoT = performance.now();
+    rafId = requestAnimationFrame(bucle);
+  }
+
+  function ajustarLienzo() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var rect = lienzo.getBoundingClientRect();
+    if (rect.width > 0) { lienzo.width = Math.round(rect.width * dpr); lienzo.height = Math.round(rect.height * dpr); }
+  }
+  window.addEventListener("resize", ajustarLienzo);
+  window.addEventListener("orientationchange", ajustarLienzo);
+
+  // ------------------------------------------------------------------ EVENTOS
+  $("btn-jugar").addEventListener("click", empezarJuego);
+  $("btn-rejugar").addEventListener("click", reiniciar);
+  $("bt-izq").addEventListener("click", function (ev) { flash(ev.currentTarget); accionIzq(); });
+  $("bt-der").addEventListener("click", function (ev) { flash(ev.currentTarget); accionDer(); });
+  $("bt-saltar").addEventListener("click", function (ev) { flash(ev.currentTarget); accionSaltar(); });
+  $("bt-interact").addEventListener("click", function (ev) { flash(ev.currentTarget); accionInteract(); });
+
+  window.addEventListener("keydown", function (ev) {
+    if (ev.repeat) return;
+    var k = ev.key;
+    if ([" ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(k) >= 0) ev.preventDefault();
+    if (fase === "titulo") { if (k === "Enter") empezarJuego(); return; }
+    if (fase === "fin") {
+      if (k === "Enter") reiniciar();
+      return;   // en estado final, ignoramos acciones del camino/bosque
+    }
+    if (k === "ArrowLeft") accionIzq();
+    else if (k === "ArrowRight") accionDer();
+    else if (k === " " || k === "ArrowUp") accionSaltar();
+    else if (k === "Enter" || k === "e" || k === "E") accionInteract();
+  });
+
+  reset();
+})();
+</script>
+
+</body>
+</html>
